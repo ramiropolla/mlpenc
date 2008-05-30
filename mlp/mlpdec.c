@@ -98,7 +98,7 @@ typedef struct MLPDecodeContext {
     //! The number of channels input into the rematrix stage
     uint8_t     max_matrix_channel[MAX_SUBSTREAMS];
 
-    //| The left shift applied to random noise in 0x31ea substreams
+    //! The left shift applied to random noise in 0x31ea substreams
     uint8_t     noise_shift[MAX_SUBSTREAMS];
     //! The current seed value for the pseudorandom noise generator(s)
     uint32_t    noisegen_seed[MAX_SUBSTREAMS];
