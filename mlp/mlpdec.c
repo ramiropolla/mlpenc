@@ -922,7 +922,6 @@ static uint8_t calculate_parity(const uint8_t *buf, unsigned int buf_size)
 
     scratch ^= scratch >> 16;
     scratch ^= scratch >> 8;
-    scratch &= 0xff;
 
     for (; buf < buf_end; buf++)
         scratch ^= *buf;
