@@ -1042,7 +1042,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
                  && get_bits1(&gb) == 0);
 
         skip_bits(&gb, (-get_bits_count(&gb)) & 15);
-        if ((substream_data_len[substr] * 8) - get_bits_count(&gb) >= 48 &&
+        if (substream_data_len[substr] * 8 - get_bits_count(&gb) >= 48 &&
             (show_bits_long(&gb, 32) == 0xd234d234 ||
              show_bits_long(&gb, 20) == 0xd234e)) {
             skip_bits(&gb, 18);
