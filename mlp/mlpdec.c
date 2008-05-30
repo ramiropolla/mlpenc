@@ -997,7 +997,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
             continue;
 
         substream_parity_present[substr] = checkdata_present;
-        substream_data_len[substr] = end - substream_start;
+        substream_data_len[substr] = (end - substream_start) * 2;
         substream_start = end;
     }
 
@@ -1005,7 +1005,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     buf_size -= get_bits_count(&gb) >> 3;
 
     for (substr = 0; substr <= m->max_decoded_substream; substr++) {
-        init_get_bits(&gb, buf, substream_data_len[substr] * 16);
+        init_get_bits(&gb, buf, substream_data_len[substr] * 8);
 
         m->blockpos[substr] = 0;
         do {
@@ -1038,11 +1038,11 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
             if (read_block_data(m, &gb, substr) < 0)
                 return -1;
 
-        } while ((get_bits_count(&gb) < substream_data_len[substr] * 16)
+        } while ((get_bits_count(&gb) < substream_data_len[substr] * 8)
                  && get_bits1(&gb) == 0);
 
         skip_bits(&gb, (-get_bits_count(&gb)) & 15);
-        if ((substream_data_len[substr] * 16) - get_bits_count(&gb) >= 48 &&
+        if ((substream_data_len[substr] * 8) - get_bits_count(&gb) >= 48 &&
             (show_bits_long(&gb, 32) == 0xd234d234 ||
              show_bits_long(&gb, 20) == 0xd234e)) {
             skip_bits(&gb, 18);
@@ -1059,24 +1059,24 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         if (substream_parity_present[substr]) {
             uint8_t parity, checksum;
 
-            parity = calculate_parity(buf, substream_data_len[substr] * 2 - 2);
+            parity = calculate_parity(buf, substream_data_len[substr] - 2);
             if ((parity ^ get_bits(&gb, 8)) != 0xa9)
                 av_log(m->avctx, AV_LOG_ERROR,
                        "Substream %d parity check failed\n", substr);
 
-            checksum = mlp_checksum8(buf, substream_data_len[substr] * 2 - 2);
+            checksum = mlp_checksum8(buf, substream_data_len[substr] - 2);
             if (checksum != get_bits(&gb, 8))
                 av_log(m->avctx, AV_LOG_ERROR, "Substream %d checksum failed\n",
                        substr);
         }
-        if (substream_data_len[substr] * 16 != get_bits_count(&gb)) {
+        if (substream_data_len[substr] * 8 != get_bits_count(&gb)) {
             av_log(m->avctx, AV_LOG_ERROR, "Substream %d length mismatch.\n",
                    substr);
             return -1;
         }
 
-        buf += substream_data_len[substr] * 2;
-        buf_size -= substream_data_len[substr] * 2;
+        buf += substream_data_len[substr];
+        buf_size -= substream_data_len[substr];
     }
 
     rematrix_channels(m, substr - 1);
