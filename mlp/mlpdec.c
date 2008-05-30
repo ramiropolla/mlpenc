@@ -769,7 +769,7 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
 
 /** Data table used for TrueHD noise generation function */
 
-static int8_t noise_table[256] = {
+static const int8_t noise_table[256] = {
      30,  51,  22,  54,   3,   7,  -4,  38,  14,  55,  46,  81,  22,  58,  -3,   2,
      52,  31,  -7,  51,  15,  44,  74,  30,  85, -17,  10,  33,  18,  80,  28,  62,
      10,  32,  23,  69,  72,  26,  35,  17,  73,  60,   8,  56,   2,   6,  -2,  -5,
