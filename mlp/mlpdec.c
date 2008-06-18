@@ -936,7 +936,7 @@ static uint8_t calculate_parity(const uint8_t *buf, unsigned int buf_size)
  */
 
 static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
-                            uint8_t *buf, int buf_size)
+                            const uint8_t *buf, int buf_size)
 {
     MLPDecodeContext *m = avctx->priv_data;
     GetBitContext gb;
