@@ -966,7 +966,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
 
     if (!m->params_valid) {
         av_log(m->avctx, AV_LOG_WARNING,
-               "Stream parameters not seen; skipping frame");
+               "Stream parameters not seen; skipping frame\n");
         return length * 2;
     }
 
@@ -988,7 +988,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
 
         if (end + header_size > length) {
             av_log(m->avctx, AV_LOG_ERROR,
-                   "Substream %d data indicated length goes off end of packet.",
+                   "Substream %d data indicated length goes off end of packet.\n",
                    substr);
             end = length - header_size;
         }
