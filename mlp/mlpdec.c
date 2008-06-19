@@ -949,12 +949,12 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     if (buf_size < 2)
         return 0;
 
-    length = AV_RB16(buf) & 0xfff;
+    length = (AV_RB16(buf) & 0xfff) * 2;
 
-    if (length * 2 > buf_size)
+    if (length > buf_size)
         return -1;
 
-    init_get_bits(&gb, buf, length * 16);
+    init_get_bits(&gb, buf, length * 8);
     skip_bits_long(&gb, 32);
 
     if (show_bits_long(&gb, 31) == (0xf8726fba >> 1)) {
@@ -967,10 +967,10 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     if (!m->params_valid) {
         av_log(m->avctx, AV_LOG_WARNING,
                "Stream parameters not seen; skipping frame\n");
-        return length * 2;
+        return length;
     }
 
-    header_size = get_bits_count(&gb) >> 4;
+    header_size = get_bits_count(&gb) >> 3;
     substream_start = 0;
 
     for (substr = 0; substr < m->num_substreams; substr++) {
@@ -981,7 +981,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         checkdata_present = get_bits1(&gb);
         skip_bits1(&gb);
 
-        end = get_bits(&gb, 12);
+        end = get_bits(&gb, 12) * 2;
 
         if (extraword_present)
             skip_bits(&gb, 16);
@@ -997,7 +997,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
             continue;
 
         substream_parity_present[substr] = checkdata_present;
-        substream_data_len[substr] = (end - substream_start) * 2;
+        substream_data_len[substr] = end - substream_start;
         substream_start = end;
     }
 
@@ -1084,7 +1084,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     if (output_data(m, substr - 1, data, data_size) < 0)
         return -1;
 
-    return length * 2;
+    return length;
 
 error:
     m->params_valid = 0;
