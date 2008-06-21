@@ -880,7 +880,7 @@ static int output_data_internal(MLPDecodeContext *m, unsigned int substr,
     int32_t *data_32 = (int32_t*) data;
     int16_t *data_16 = (int16_t*) data;
 
-    if (*data_size < m->max_channel[substr] * m->blockpos[substr]
+    if (*data_size < (m->max_channel[substr] + 1) * m->blockpos[substr]
                       * (is32 ? 4 : 2))
         return -1;
 
