@@ -139,7 +139,9 @@ typedef struct MLPDecodeContext {
     int8_t      output_shift[MAX_SUBSTREAMS][MAX_CHANNELS];
 
     //@{
-    /** Filter data. Filter 0 is an FIR filter, filter 1 IIR. */
+    /** Filter data. */
+#define FIR 0
+#define IIR 1
     //! Number of taps in filter
     uint8_t     filter_order[MAX_CHANNELS][2];
     //! Right shift to apply to output of filter
@@ -486,10 +488,10 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
     memset(m->quant_step_size[substr], 0, sizeof(m->quant_step_size[substr]));
 
     for (ch = m->min_channel[substr]; ch <= m->max_channel[substr]; ch++) {
-        m->filter_order  [ch][0] = 0;
-        m->filter_order  [ch][1] = 0;
-        m->filter_coeff_q[ch][0] = 0;
-        m->filter_coeff_q[ch][1] = 0;
+        m->filter_order  [ch][FIR] = 0;
+        m->filter_order  [ch][IIR] = 0;
+        m->filter_coeff_q[ch][FIR] = 0;
+        m->filter_coeff_q[ch][IIR] = 0;
 
         memset(m->filter_coeff[ch], 0, sizeof(m->filter_coeff[ch]));
         memset(m->filter_state[ch], 0, sizeof(m->filter_state[ch]));
@@ -555,7 +557,7 @@ static int read_filter_params(MLPDecodeContext *m, GetBitContext *gbp,
         if (get_bits1(gbp)) {
             int state_bits, state_shift;
 
-            if (filter == 0) {
+            if (filter == FIR) {
                 av_log(m->avctx, AV_LOG_ERROR,
                        "FIR filter has state data specified\n");
                 return -1;
@@ -662,16 +664,16 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
         if (get_bits1(gbp)) {
             if (m->param_presence_flags[substr] & 0x08)
                 if (get_bits1(gbp))
-                    if (read_filter_params(m, gbp, ch, 0) < 0)
+                    if (read_filter_params(m, gbp, ch, FIR) < 0)
                         return -1;
 
             if (m->param_presence_flags[substr] & 0x04)
                 if (get_bits1(gbp))
-                    if (read_filter_params(m, gbp, ch, 1) < 0)
+                    if (read_filter_params(m, gbp, ch, IIR) < 0)
                         return -1;
 
-            if (m->filter_order[ch][0] > 0 && m->filter_order[ch][1] > 0
-                && m->filter_coeff_q[ch][0] != m->filter_coeff_q[ch][1]) {
+            if (m->filter_order[ch][FIR] > 0 && m->filter_order[ch][IIR] > 0
+                && m->filter_coeff_q[ch][FIR] != m->filter_coeff_q[ch][IIR]) {
                 av_log(m->avctx, AV_LOG_ERROR,
                        "FIR and IIR filters must use same precision\n");
                 return -1;
@@ -710,15 +712,15 @@ static int filter_sample(MLPDecodeContext *m, unsigned int substr,
             accum += (int64_t)m->filter_state[channel][j][i] *
                      m->filter_coeff[channel][j][i];
 
-    accum = accum >> m->filter_coeff_q[channel][0];
+    accum = accum >> m->filter_coeff_q[channel][FIR];
     result = (accum + residual)
                 & ~((1 << m->quant_step_size[substr][channel]) - 1);
 
     memmove(&m->filter_state[channel][0][1], &m->filter_state[channel][0][0],
             sizeof(m->filter_state[channel][0][0]) * (MAX_FILTER_ORDER * 2 - 1));
 
-    m->filter_state[channel][0][0] = result;
-    m->filter_state[channel][1][0] = result - accum;
+    m->filter_state[channel][FIR][0] = result;
+    m->filter_state[channel][IIR][0] = result - accum;
 
     return result;
 }
