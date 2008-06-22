@@ -523,6 +523,7 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
 static int read_filter_params(MLPDecodeContext *m, GetBitContext *gbp,
                               unsigned int channel, unsigned int filter)
 {
+    const char fchar = filter ? 'I' : 'F';
     int i, order;
 
     // filter is 0 for FIR, 1 for IIR
@@ -532,7 +533,7 @@ static int read_filter_params(MLPDecodeContext *m, GetBitContext *gbp,
     if (order > MAX_FILTER_ORDER) {
         av_log(m->avctx, AV_LOG_ERROR,
                "%cIR filter order %d is greater than maximum %d\n",
-               filter ? 'I' : 'F', order, MAX_FILTER_ORDER);
+               fchar, order, MAX_FILTER_ORDER);
         return -1;
     }
     m->filter_order[channel][filter] = order;
@@ -547,13 +548,13 @@ static int read_filter_params(MLPDecodeContext *m, GetBitContext *gbp,
         if (coeff_bits < 1 || coeff_bits > 16) {
             av_log(m->avctx, AV_LOG_ERROR,
                    "%cIR filter coeff_bits must be between 1 and 16\n",
-                   filter ? 'I' : 'F');
+                   fchar);
             return -1;
         }
         if (coeff_bits + coeff_shift > 16) {
             av_log(m->avctx, AV_LOG_ERROR,
                    "Sum of coeff_bits and coeff_shift for %cIR filter must be 16 or less\n",
-                   filter ? 'I' : 'F');
+                   fchar);
             return -1;
         }
 
