@@ -108,6 +108,13 @@ typedef struct MLPDecodeContext {
 
     //! Bitmask of which parameter sets are conveyed in a decoding parameter block
     uint8_t     param_presence_flags[MAX_SUBSTREAMS];
+#define PARAM_BLOCKSIZE     (1 << 7)
+#define PARAM_MATRIX        (1 << 6)
+#define PARAM_OUTSHIFT      (1 << 5)
+#define PARAM_QUANTSTEP     (1 << 4)
+#define PARAM_FIR           (1 << 3)
+#define PARAM_IIR           (1 << 2)
+#define PARAM_HUFFOFFSET    (1 << 1)
     //@}
 
     //@{
@@ -589,7 +596,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
     if (get_bits1(gbp))
         m->param_presence_flags[substr] = get_bits(gbp, 8);
 
-    if (m->param_presence_flags[substr] & 0x80)
+    if (m->param_presence_flags[substr] & PARAM_BLOCKSIZE)
         if (get_bits1(gbp)) {
             m->blocksize[substr] = get_bits(gbp, 9);
             if (m->blocksize[substr] > MAX_BLOCKSIZE) {
@@ -599,7 +606,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
             }
         }
 
-    if (m->param_presence_flags[substr] & 0x40)
+    if (m->param_presence_flags[substr] & PARAM_MATRIX)
         if (get_bits1(gbp)) {
             m->num_primitive_matrices[substr] = get_bits(gbp, 4);
 
@@ -641,7 +648,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
             }
         }
 
-    if (m->param_presence_flags[substr] & 0x20)
+    if (m->param_presence_flags[substr] & PARAM_OUTSHIFT)
         if (get_bits1(gbp)) {
             for (ch = 0; ch <= m->max_matrix_channel[substr]; ch++) {
                 m->output_shift[substr][ch] = get_bits(gbp, 4);
@@ -651,7 +658,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
             }
         }
 
-    if (m->param_presence_flags[substr] & 0x10)
+    if (m->param_presence_flags[substr] & PARAM_QUANTSTEP)
         if (get_bits1(gbp))
             for (ch = 0; ch <= m->max_channel[substr]; ch++) {
                 m->quant_step_size[substr][ch] = get_bits(gbp, 4);
@@ -662,12 +669,12 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
 
     for (ch = m->min_channel[substr]; ch <= m->max_channel[substr]; ch++)
         if (get_bits1(gbp)) {
-            if (m->param_presence_flags[substr] & 0x08)
+            if (m->param_presence_flags[substr] & PARAM_FIR)
                 if (get_bits1(gbp))
                     if (read_filter_params(m, gbp, ch, FIR) < 0)
                         return -1;
 
-            if (m->param_presence_flags[substr] & 0x04)
+            if (m->param_presence_flags[substr] & PARAM_IIR)
                 if (get_bits1(gbp))
                     if (read_filter_params(m, gbp, ch, IIR) < 0)
                         return -1;
@@ -679,7 +686,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                 return -1;
             }
 
-            if (m->param_presence_flags[substr] & 0x02)
+            if (m->param_presence_flags[substr] & PARAM_HUFFOFFSET)
                 if (get_bits1(gbp))
                     m->huff_offset[ch] = get_sbits(gbp, 15);
 
