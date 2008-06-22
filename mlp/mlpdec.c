@@ -139,7 +139,7 @@ typedef struct MLPDecodeContext {
     int8_t      output_shift[MAX_SUBSTREAMS][MAX_CHANNELS];
 
     //@{
-    /* Filter data. Filter 0 is an FIR filter, filter 1 IIR. */
+    /** Filter data. Filter 0 is an FIR filter, filter 1 IIR. */
     //! Number of taps in filter
     uint8_t     filter_order[MAX_CHANNELS][2];
     //! Right shift to apply to output of filter
