@@ -450,7 +450,7 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
         tmp &= 0xff;
         if (tmp != lossless_check)
             av_log(m->avctx, AV_LOG_WARNING,
-                   "Lossless check failed - expected %x, calculated %x\n",
+                   "Lossless check failed - expected %02x, calculated %02x\n",
                    lossless_check, tmp);
         else
             dprintf(m->avctx, "Lossless check passed for substream %d (%x)\n",
