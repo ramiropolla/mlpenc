@@ -679,8 +679,8 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                     if (read_filter_params(m, gbp, ch, IIR) < 0)
                         return -1;
 
-            if (m->filter_order[ch][FIR] > 0 && m->filter_order[ch][IIR] > 0
-                && m->filter_coeff_q[ch][FIR] != m->filter_coeff_q[ch][IIR]) {
+            if (m->filter_order  [ch][FIR] && m->filter_order  [ch][IIR] &&
+                m->filter_coeff_q[ch][FIR] != m->filter_coeff_q[ch][IIR]) {
                 av_log(m->avctx, AV_LOG_ERROR,
                        "FIR and IIR filters must use same precision\n");
                 return -1;
