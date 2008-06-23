@@ -726,24 +726,27 @@ static int filter_sample(MLPDecodeContext *m, unsigned int substr,
 
     /* TODO: Move this code to DSPContext? */
 
+#define INDEX(channel, order, pos) \
+    ((m->filter_index[channel][order] + (pos)) & (MAX_FILTER_ORDER - 1))
+
     for (j = 0; j < 2; j++)
-        for (i = 0; i < m->filter_order[channel][j]; i++) {
-            index = (m->filter_index[channel][j] + i) & (MAX_FILTER_ORDER - 1);
-            accum += (int64_t)m->filter_state[channel][j][index] *
+        for (i = 0; i < m->filter_order[channel][j]; i++)
+            accum += (int64_t)m->filter_state[channel][j][INDEX(channel,j,i)] *
                      m->filter_coeff[channel][j][i];
-        }
 
     accum = accum >> m->filter_coeff_q[channel][FIR];
     result = (accum + residual)
                 & ~((1 << m->quant_step_size[substr][channel]) - 1);
 
-    index = (m->filter_index[channel][FIR] - 1) & (MAX_FILTER_ORDER - 1);
+    index = INDEX(channel, FIR, -1);
     m->filter_state[channel][FIR][index] = result;
     m->filter_index[channel][FIR] = index;
 
-    index = (m->filter_index[channel][IIR] - 1) & (MAX_FILTER_ORDER - 1);
+    index = INDEX(channel, IIR, -1);
     m->filter_state[channel][IIR][index] = result - accum;
     m->filter_index[channel][IIR] = index;
+
+#undef INDEX
 
     return result;
 }
