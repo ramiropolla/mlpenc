@@ -721,9 +721,10 @@ static int filter_sample(MLPDecodeContext *m, unsigned int substr,
     /* TODO: Move this code to DSPContext? */
 
     for (j = 0; j < 2; j++)
-        for (i = 0; i < m->filter_order[channel][j]; i++)
+        for (i = 0; i < m->filter_order[channel][j]; i++) {
             accum += (int64_t)m->filter_state[channel][j][i] *
                      m->filter_coeff[channel][j][i];
+        }
 
     accum = accum >> m->filter_coeff_q[channel][FIR];
     result = (accum + residual)
