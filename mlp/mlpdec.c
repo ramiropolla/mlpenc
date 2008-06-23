@@ -154,6 +154,8 @@ typedef struct MLPDecodeContext {
     //! Right shift to apply to output of filter
     uint8_t     filter_coeff_q[MAX_CHANNELS][2];
 
+    uint8_t     filter_index[MAX_CHANNELS][2];
+
     int32_t     filter_coeff[MAX_CHANNELS][2][MAX_FILTER_ORDER];
     int32_t     filter_state[MAX_CHANNELS][2][MAX_FILTER_ORDER];
     //@}
@@ -495,6 +497,8 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
     memset(m->quant_step_size[substr], 0, sizeof(m->quant_step_size[substr]));
 
     for (ch = m->min_channel[substr]; ch <= m->max_channel[substr]; ch++) {
+        m->filter_index  [ch][FIR] = 0;
+        m->filter_index  [ch][IIR] = 0;
         m->filter_order  [ch][FIR] = 0;
         m->filter_order  [ch][IIR] = 0;
         m->filter_coeff_q[ch][FIR] = 0;
@@ -579,6 +583,8 @@ static int read_filter_params(MLPDecodeContext *m, GetBitContext *gbp,
             for (i = 0; i < order; i++)
                 m->filter_state[channel][filter][i] =
                     get_sbits(gbp, state_bits) << state_shift;
+
+            m->filter_index[channel][filter] = 0;
         }
     }
 
@@ -714,7 +720,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
 static int filter_sample(MLPDecodeContext *m, unsigned int substr,
                          unsigned int channel, int32_t residual)
 {
-    unsigned int i, j;
+    unsigned int i, j, index;
     int64_t accum = 0;
     int32_t result;
 
@@ -722,7 +728,8 @@ static int filter_sample(MLPDecodeContext *m, unsigned int substr,
 
     for (j = 0; j < 2; j++)
         for (i = 0; i < m->filter_order[channel][j]; i++) {
-            accum += (int64_t)m->filter_state[channel][j][i] *
+            index = (m->filter_index[channel][j] + i) & (MAX_FILTER_ORDER - 1);
+            accum += (int64_t)m->filter_state[channel][j][index] *
                      m->filter_coeff[channel][j][i];
         }
 
@@ -730,11 +737,13 @@ static int filter_sample(MLPDecodeContext *m, unsigned int substr,
     result = (accum + residual)
                 & ~((1 << m->quant_step_size[substr][channel]) - 1);
 
-    memmove(&m->filter_state[channel][0][1], &m->filter_state[channel][0][0],
-            sizeof(m->filter_state[channel][0][0]) * (MAX_FILTER_ORDER * 2 - 1));
+    index = (m->filter_index[channel][FIR] - 1) & (MAX_FILTER_ORDER - 1);
+    m->filter_state[channel][FIR][index] = result;
+    m->filter_index[channel][FIR] = index;
 
-    m->filter_state[channel][FIR][0] = result;
-    m->filter_state[channel][IIR][0] = result - accum;
+    index = (m->filter_index[channel][IIR] - 1) & (MAX_FILTER_ORDER - 1);
+    m->filter_state[channel][IIR][index] = result - accum;
+    m->filter_index[channel][IIR] = index;
 
     return result;
 }
