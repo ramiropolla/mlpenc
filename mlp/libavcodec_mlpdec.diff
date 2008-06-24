@@ -1,8 +1,8 @@
 Index: configure
 ===================================================================
---- configure	(revision 13535)
+--- configure	(revision 13943)
 +++ configure	(working copy)
-@@ -818,6 +818,7 @@
+@@ -832,6 +832,7 @@
  dxa_decoder_deps="zlib"
  flashsv_decoder_deps="zlib"
  flashsv_encoder_deps="zlib"
@@ -12,21 +12,21 @@ Index: configure
  png_encoder_deps="zlib"
 Index: Changelog
 ===================================================================
---- Changelog	(revision 13535)
+--- Changelog	(revision 13943)
 +++ Changelog	(working copy)
-@@ -121,6 +121,7 @@
- - BFI demuxer
+@@ -122,6 +122,7 @@
  - MAXIS EA XA (.xa) demuxer / decoder
  - BFI video decoder
+ - OMA demuxer
 +- MLP/TrueHD decoder
  
  version 0.4.9-pre1:
  
 Index: libavcodec/Makefile
 ===================================================================
---- libavcodec/Makefile	(revision 13535)
+--- libavcodec/Makefile	(revision 13943)
 +++ libavcodec/Makefile	(working copy)
-@@ -111,6 +111,7 @@
+@@ -107,6 +107,7 @@
  OBJS-$(CONFIG_MJPEG_DECODER)           += mjpegdec.o mjpeg.o
  OBJS-$(CONFIG_MJPEG_ENCODER)           += mjpegenc.o mjpeg.o mpegvideo_enc.o motion_est.o ratecontrol.o mpeg12data.o mpegvideo.o
  OBJS-$(CONFIG_MJPEGB_DECODER)          += mjpegbdec.o mjpegdec.o mjpeg.o
@@ -36,7 +36,7 @@ Index: libavcodec/Makefile
  OBJS-$(CONFIG_MP2_ENCODER)             += mpegaudioenc.o mpegaudio.o mpegaudiodata.o
 Index: libavcodec/allcodecs.c
 ===================================================================
---- libavcodec/allcodecs.c	(revision 13535)
+--- libavcodec/allcodecs.c	(revision 13943)
 +++ libavcodec/allcodecs.c	(working copy)
 @@ -189,6 +189,7 @@
      REGISTER_DECODER (IMC, imc);
