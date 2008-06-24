@@ -321,12 +321,11 @@ static int mlp_decode_init(AVCodecContext *avctx)
  *  information is not actually necessary for decoding, only for playback.
  */
 
-static int read_major_sync(MLPDecodeContext *m, const uint8_t *buf,
-                           unsigned int buf_size)
+static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
 {
     MLPHeaderInfo mh;
 
-    if (ff_mlp_read_major_sync(m->avctx, &mh, buf, buf_size) != 0)
+    if (ff_mlp_read_major_sync(m->avctx, &mh, gb) != 0)
         return -1;
 
     if (mh.group1_bits == 0) {
@@ -982,14 +981,15 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     if (length > buf_size)
         return -1;
 
+    buf      += 4;
+    buf_size -= 4;
+
     init_get_bits(&gb, buf, length * 8);
-    skip_bits_long(&gb, 32);
 
     if (show_bits_long(&gb, 31) == (0xf8726fba >> 1)) {
         dprintf(m->avctx, "Found major sync\n");
-        if (read_major_sync(m, buf + 4, buf_size - 4) < 0)
+        if (read_major_sync(m, &gb) < 0)
             goto error;
-        skip_bits_long(&gb, 28 * 8);
     }
 
     if (!m->params_valid) {
