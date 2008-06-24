@@ -967,7 +967,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
 {
     MLPDecodeContext *m = avctx->priv_data;
     GetBitContext gb;
-    unsigned int length, substr;
+    unsigned int length, substr, bytes_left;
     unsigned int substream_start;
     unsigned int header_size;
     uint8_t substream_parity_present[MAX_SUBSTREAMS];
@@ -976,15 +976,16 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     if (buf_size < 2)
         return 0;
 
-    length = (AV_RB16(buf) & 0xfff) * 2;
+    bytes_left = length = (AV_RB16(buf) & 0xfff) * 2;
 
     if (length > buf_size)
         return -1;
 
     buf      += 4;
     buf_size -= 4;
+    bytes_left -= 4;
 
-    init_get_bits(&gb, buf, (length - 4) * 8);
+    init_get_bits(&gb, buf, bytes_left * 8);
 
     if (show_bits_long(&gb, 31) == (0xf8726fba >> 1)) {
         dprintf(m->avctx, "Found major sync\n");
