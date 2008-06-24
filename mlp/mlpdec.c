@@ -984,7 +984,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     buf      += 4;
     buf_size -= 4;
 
-    init_get_bits(&gb, buf, length * 8);
+    init_get_bits(&gb, buf, (length - 4) * 8);
 
     if (show_bits_long(&gb, 31) == (0xf8726fba >> 1)) {
         dprintf(m->avctx, "Found major sync\n");
