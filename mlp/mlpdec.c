@@ -982,7 +982,6 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         return -1;
 
     buf      += 4;
-    buf_size -= 4;
     bytes_left -= 4;
 
     init_get_bits(&gb, buf, bytes_left * 8);
@@ -1031,7 +1030,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     }
 
     buf += get_bits_count(&gb) >> 3;
-    buf_size -= get_bits_count(&gb) >> 3;
+    bytes_left -= get_bits_count(&gb) >> 3;
 
     for (substr = 0; substr <= m->max_decoded_substream; substr++) {
         init_get_bits(&gb, buf, substream_data_len[substr] * 8);
@@ -1105,7 +1104,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         }
 
         buf += substream_data_len[substr];
-        buf_size -= substream_data_len[substr];
+        bytes_left -= substream_data_len[substr];
     }
 
     rematrix_channels(m, substr - 1);
