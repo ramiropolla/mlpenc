@@ -969,7 +969,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     GetBitContext gb;
     unsigned int length, substr, bytes_left;
     unsigned int substream_start;
-    unsigned int header_size;
+    unsigned int header_size = 4;
     uint8_t substream_parity_present[MAX_SUBSTREAMS];
     uint16_t substream_data_len[MAX_SUBSTREAMS];
     uint8_t parity_bits = 0;
@@ -993,6 +993,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         dprintf(m->avctx, "Found major sync\n");
         if (read_major_sync(m, &gb) < 0)
             goto error;
+        header_size += 28;
         buf += 28;
     }
 
@@ -1002,7 +1003,6 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         return length;
     }
 
-    header_size = get_bits_count(&gb) >> 3;
     substream_start = 0;
 
     for (substr = 0; substr < m->num_substreams; substr++) {
@@ -1017,11 +1017,13 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
 
         parity_bits ^= *buf++;
         parity_bits ^= *buf++;
+        header_size += 2;
 
         if (extraword_present) {
             skip_bits(&gb, 16);
             parity_bits ^= *buf++;
             parity_bits ^= *buf++;
+            header_size += 2;
         }
 
         if (end + header_size > length) {
