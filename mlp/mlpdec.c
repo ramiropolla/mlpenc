@@ -975,7 +975,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     uint8_t parity_bits = 0;
     int i;
 
-    if (buf_size < 2)
+    if (buf_size < 4)
         return 0;
 
     bytes_left = length = (AV_RB16(buf) & 0xfff) * 2;
