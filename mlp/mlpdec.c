@@ -1033,6 +1033,14 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
             end = length - header_size;
         }
 
+        if (end < substream_start) {
+            av_log(avctx, AV_LOG_INFO,
+                   "Substream %d data indicated end offset "
+                   "is before calculated start offset.\n",
+                   substr);
+            goto error;
+        }
+
         if (substr > m->max_decoded_substream)
             continue;
 
