@@ -1037,7 +1037,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         }
 
         if (end < substream_start) {
-            av_log(avctx, AV_LOG_INFO,
+            av_log(avctx, AV_LOG_ERROR,
                    "Substream %d data indicated end offset "
                    "is before calculated start offset.\n",
                    substr);
@@ -1053,7 +1053,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     }
 
     if ((((parity_bits >> 4) ^ parity_bits) & 0xF) != 0xF) {
-        av_log(avctx, AV_LOG_INFO, "Parity check failed.\n");
+        av_log(avctx, AV_LOG_ERROR, "Parity check failed.\n");
         goto error;
     }
 
