@@ -994,6 +994,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         if (read_major_sync(m, &gb) < 0)
             goto error;
         header_size += 28;
+        bytes_left -= 28;
         buf += 28;
     }
 
@@ -1018,12 +1019,14 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         parity_bits ^= *buf++;
         parity_bits ^= *buf++;
         header_size += 2;
+        bytes_left -= 2;
 
         if (extraword_present) {
             skip_bits(&gb, 16);
             parity_bits ^= *buf++;
             parity_bits ^= *buf++;
             header_size += 2;
+            bytes_left -= 2;
         }
 
         if (end + header_size > length) {
@@ -1053,8 +1056,6 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         av_log(avctx, AV_LOG_INFO, "Parity check failed.\n");
         goto error;
     }
-
-    bytes_left -= get_bits_count(&gb) >> 3;
 
     for (substr = 0; substr <= m->max_decoded_substream; substr++) {
         init_get_bits(&gb, buf, substream_data_len[substr] * 8);
