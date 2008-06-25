@@ -972,6 +972,8 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     unsigned int header_size;
     uint8_t substream_parity_present[MAX_SUBSTREAMS];
     uint16_t substream_data_len[MAX_SUBSTREAMS];
+    uint8_t parity_bits = 0;
+    int i;
 
     if (buf_size < 2)
         return 0;
@@ -981,7 +983,8 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     if (length > buf_size)
         return -1;
 
-    buf      += 4;
+    for(i = 0; i < 4; i++)
+        parity_bits ^= *buf++;
     bytes_left -= 4;
 
     init_get_bits(&gb, buf, bytes_left * 8);
@@ -990,6 +993,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         dprintf(m->avctx, "Found major sync\n");
         if (read_major_sync(m, &gb) < 0)
             goto error;
+        buf += 28;
     }
 
     if (!m->params_valid) {
@@ -1011,8 +1015,14 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
 
         end = get_bits(&gb, 12) * 2;
 
-        if (extraword_present)
+        parity_bits ^= *buf++;
+        parity_bits ^= *buf++;
+
+        if (extraword_present) {
             skip_bits(&gb, 16);
+            parity_bits ^= *buf++;
+            parity_bits ^= *buf++;
+        }
 
         if (end + header_size > length) {
             av_log(m->avctx, AV_LOG_ERROR,
@@ -1029,7 +1039,11 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         substream_start = end;
     }
 
-    buf += get_bits_count(&gb) >> 3;
+    if ((((parity_bits >> 4) ^ parity_bits) & 0xF) != 0xF) {
+        av_log(avctx, AV_LOG_INFO, "Parity check failed.\n");
+        goto error;
+    }
+
     bytes_left -= get_bits_count(&gb) >> 3;
 
     for (substr = 0; substr <= m->max_decoded_substream; substr++) {
