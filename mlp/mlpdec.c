@@ -1009,6 +1009,9 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     for (substr = 0; substr < m->num_substreams; substr++) {
         int extraword_present, checkdata_present, end;
 
+        if (bytes_left < 2)
+            return -1;
+
         extraword_present = get_bits1(&gb);
         skip_bits1(&gb);
         checkdata_present = get_bits1(&gb);
@@ -1022,6 +1025,8 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         bytes_left -= 2;
 
         if (extraword_present) {
+            if (bytes_left < 2)
+                return -1;
             skip_bits(&gb, 16);
             parity_bits ^= *buf++;
             parity_bits ^= *buf++;
