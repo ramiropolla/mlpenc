@@ -999,6 +999,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     if (!m->params_valid) {
         av_log(m->avctx, AV_LOG_WARNING,
                "Stream parameters not seen; skipping frame\n");
+        *data_size = 0;
         return length;
     }
 
