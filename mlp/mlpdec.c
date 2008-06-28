@@ -965,6 +965,12 @@ static uint8_t calculate_parity(const uint8_t *buf, unsigned int buf_size)
     return scratch;
 }
 
+#define PARITY_2BYTES do { \
+        parity_bits ^= *buf++; \
+        parity_bits ^= *buf++; \
+        header_size += 2; \
+    } while(0)
+
 /**
  * Read an access unit from the stream.
  * Returns -1 on error, 0 if not enough data is present in the input stream
@@ -978,11 +984,10 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     GetBitContext gb;
     unsigned int length, substr;
     unsigned int substream_start;
-    unsigned int header_size = 4;
+    unsigned int header_size = 0;
     uint8_t substream_parity_present[MAX_SUBSTREAMS];
     uint16_t substream_data_len[MAX_SUBSTREAMS];
     uint8_t parity_bits = 0;
-    int i;
 
     if (buf_size < 4)
         return 0;
@@ -992,8 +997,8 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     if (length > buf_size)
         return -1;
 
-    for(i = 0; i < 4; i++)
-        parity_bits ^= *buf++;
+    PARITY_2BYTES;
+    PARITY_2BYTES;
 
     init_get_bits(&gb, buf, (length - 4) * 8);
 
@@ -1024,15 +1029,11 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
 
         end = get_bits(&gb, 12) * 2;
 
-        parity_bits ^= *buf++;
-        parity_bits ^= *buf++;
-        header_size += 2;
+        PARITY_2BYTES;
 
         if (extraword_present) {
             skip_bits(&gb, 16);
-            parity_bits ^= *buf++;
-            parity_bits ^= *buf++;
-            header_size += 2;
+            PARITY_2BYTES;
         }
 
         if (end + header_size > length) {
