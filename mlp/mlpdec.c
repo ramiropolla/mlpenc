@@ -285,7 +285,8 @@ static inline void calculate_sign_huff(MLPDecodeContext *m, unsigned int substr,
  */
 
 static inline int read_huff(MLPDecodeContext *m, GetBitContext *gbp,
-                            unsigned int substr, unsigned int channel)
+                            unsigned int substr, unsigned int channel,
+                            int32_t *sample)
 {
     int codebook = m->codebook[channel];
     int quant_step_size = m->quant_step_size[substr][channel];
@@ -296,12 +297,16 @@ static inline int read_huff(MLPDecodeContext *m, GetBitContext *gbp,
         result = get_vlc2(gbp, huff_vlc[codebook-1].table,
                           VLC_BITS, (9 + VLC_BITS - 1) / VLC_BITS);
 
+    if (result < 0)
+        return result;
+
     if (lsb_bits > 0)
         result = (result << lsb_bits) + get_bits(gbp, lsb_bits);
 
     result += m->sign_huff_offset[channel];
 
-    return result << quant_step_size;
+    *sample = result << quant_step_size;
+    return 0;
 }
 
 /** Initialize the decoder. */
@@ -776,10 +781,14 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
                 m->bypassed_lsbs[i + m->blockpos[substr]][mat] = get_bits1(gbp);
 
         for (ch = m->min_channel[substr]; ch <= m->max_channel[substr]; ch++) {
-            int32_t sample = read_huff(m, gbp, substr, ch);
-            int32_t filtered = filter_sample(m, substr, ch, sample);
+            int32_t sample;
 
-            m->sample_buffer[i + m->blockpos[substr]][ch] = filtered;
+            if (read_huff(m, gbp, substr, ch, &sample) < 0)
+                return -1;
+
+            sample = filter_sample(m, substr, ch, sample);
+
+            m->sample_buffer[i + m->blockpos[substr]][ch] = sample;
         }
     }
 
