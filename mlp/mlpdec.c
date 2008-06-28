@@ -381,14 +381,14 @@ static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
         return -1;
     }
 
-    m->access_unit_size = mh.access_unit_size;
+    m->access_unit_size      = mh.access_unit_size;
     m->access_unit_size_pow2 = mh.access_unit_size_pow2;
 
-    m->num_substreams = mh.num_substreams;
+    m->num_substreams        = mh.num_substreams;
     m->max_decoded_substream = m->num_substreams - 1;
 
-    m->avctx->sample_rate = mh.group1_samplerate;
-    m->avctx->frame_size = mh.access_unit_size;
+    m->avctx->sample_rate    = mh.group1_samplerate;
+    m->avctx->frame_size     = mh.access_unit_size;
 
 #ifdef CONFIG_AUDIO_NONSHORT
     m->avctx->bits_per_sample = mh.group1_bits;
@@ -428,8 +428,8 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
 
     skip_bits(gbp, 16); /* Output timestamp */
 
-    m->min_channel[substr]        = get_bits(gbp, 4);
-    m->max_channel[substr]        = get_bits(gbp, 4);
+    m->min_channel       [substr] = get_bits(gbp, 4);
+    m->max_channel       [substr] = get_bits(gbp, 4);
     m->max_matrix_channel[substr] = get_bits(gbp, 4);
 
     if (m->min_channel[substr] > m->max_channel[substr]) {
@@ -450,7 +450,7 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
         m->max_decoded_substream = substr;
     }
 
-    m->noise_shift[substr] = get_bits(gbp, 4);
+    m->noise_shift  [substr] = get_bits(gbp, 4);
     m->noisegen_seed[substr] = get_bits(gbp, 23);
 
     skip_bits(gbp, 19);
@@ -492,12 +492,12 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
         av_log(m->avctx, AV_LOG_ERROR, "Restart header checksum error\n");
 
     /* Set default decoding parameters */
-    m->param_presence_flags[substr] = 0xff;
+    m->param_presence_flags  [substr] = 0xff;
     m->num_primitive_matrices[substr] = 0;
-    m->blocksize[substr] = 8;
-    m->lossless_check_data[substr] = 0;
+    m->blocksize             [substr] = 8;
+    m->lossless_check_data   [substr] = 0;
 
-    memset(m->output_shift[substr],    0, sizeof(m->output_shift[substr]));
+    memset(m->output_shift   [substr], 0, sizeof(m->output_shift   [substr]));
     memset(m->quant_step_size[substr], 0, sizeof(m->quant_step_size[substr]));
 
     for (ch = m->min_channel[substr]; ch <= m->max_channel[substr]; ch++) {
@@ -579,7 +579,7 @@ static int read_filter_params(MLPDecodeContext *m, GetBitContext *gbp,
                 return -1;
             }
 
-            state_bits = get_bits(gbp, 4);
+            state_bits  = get_bits(gbp, 4);
             state_shift = get_bits(gbp, 4);
 
             /* TODO: check validity of state data */
@@ -706,7 +706,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                 if (get_bits1(gbp))
                     m->huff_offset[ch] = get_sbits(gbp, 15);
 
-            m->codebook[ch] = get_bits(gbp, 2);
+            m->codebook [ch] = get_bits(gbp, 2);
             m->huff_lsbs[ch] = get_bits(gbp, 5);
 
             calculate_sign_huff(m, substr, ch);
