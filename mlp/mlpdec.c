@@ -967,7 +967,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
 {
     MLPDecodeContext *m = avctx->priv_data;
     GetBitContext gb;
-    unsigned int length, substr, bytes_left;
+    unsigned int length, substr;
     unsigned int substream_start;
     unsigned int header_size = 4;
     uint8_t substream_parity_present[MAX_SUBSTREAMS];
@@ -978,23 +978,21 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     if (buf_size < 4)
         return 0;
 
-    bytes_left = length = (AV_RB16(buf) & 0xfff) * 2;
+    length = (AV_RB16(buf) & 0xfff) * 2;
 
     if (length > buf_size)
         return -1;
 
     for(i = 0; i < 4; i++)
         parity_bits ^= *buf++;
-    bytes_left -= 4;
 
-    init_get_bits(&gb, buf, bytes_left * 8);
+    init_get_bits(&gb, buf, (length - 4) * 8);
 
     if (show_bits_long(&gb, 31) == (0xf8726fba >> 1)) {
         dprintf(m->avctx, "Found major sync\n");
         if (read_major_sync(m, &gb) < 0)
             goto error;
         header_size += 28;
-        bytes_left -= 28;
         buf += 28;
     }
 
@@ -1009,9 +1007,6 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     for (substr = 0; substr < m->num_substreams; substr++) {
         int extraword_present, checkdata_present, end;
 
-        if (bytes_left < 2)
-            return -1;
-
         extraword_present = get_bits1(&gb);
         skip_bits1(&gb);
         checkdata_present = get_bits1(&gb);
@@ -1022,16 +1017,12 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         parity_bits ^= *buf++;
         parity_bits ^= *buf++;
         header_size += 2;
-        bytes_left -= 2;
 
         if (extraword_present) {
-            if (bytes_left < 2)
-                return -1;
             skip_bits(&gb, 16);
             parity_bits ^= *buf++;
             parity_bits ^= *buf++;
             header_size += 2;
-            bytes_left -= 2;
         }
 
         if (end + header_size > length) {
@@ -1134,7 +1125,6 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
         }
 
         buf += substream_data_len[substr];
-        bytes_left -= substream_data_len[substr];
     }
 
     rematrix_channels(m, substr - 1);
