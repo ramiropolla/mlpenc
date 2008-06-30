@@ -433,8 +433,6 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
     if (m->min_channel[substr] > m->max_channel[substr]) {
         av_log(m->avctx, AV_LOG_ERROR,
                "Substream min channel cannot be greater than max channel.\n");
-        m->min_channel[substr] = m->max_channel[substr]
-            = m->max_matrix_channel[substr] = 0;
         return -1;
     }
 
