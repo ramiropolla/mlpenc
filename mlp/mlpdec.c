@@ -757,9 +757,11 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
 {
     unsigned int i, mat, ch, expected_stream_pos = 0;
 
-    if (m->data_check_present[substr])
+    if (m->data_check_present[substr]) {
         expected_stream_pos = get_bits_count(gbp) + get_bits(gbp, 16);
-        /* UNTESTED - find an example stream */
+        av_log(m->avctx, AV_LOG_WARNING, "This file contains some features "
+               "we have not tested yet. %s\n", sample_message);
+    }
 
     if (m->blockpos[substr] + m->blocksize[substr] > m->access_unit_size) {
         av_log(m->avctx, AV_LOG_ERROR, "Too many audio samples in frame\n");
