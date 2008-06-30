@@ -309,8 +309,6 @@ static inline int read_huff(MLPDecodeContext *m, GetBitContext *gbp,
     return 0;
 }
 
-/** Initialize the decoder. */
-
 static int mlp_decode_init(AVCodecContext *avctx)
 {
     MLPDecodeContext *m = avctx->priv_data;
