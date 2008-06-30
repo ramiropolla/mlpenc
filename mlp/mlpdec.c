@@ -629,7 +629,6 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                     av_log(m->avctx, AV_LOG_ERROR,
                            "Invalid channel %d specified as output from matrix\n",
                            m->matrix_ch[substr][mat]);
-                    m->matrix_ch[substr][mat] = 0;
                     return -1;
                 }
                 if (frac_bits > 14) {
