@@ -549,7 +549,7 @@ static int read_filter_params(MLPDecodeContext *m, GetBitContext *gbp,
 
         m->filter_coeff_q[channel][filter] = get_bits(gbp, 4);
 
-        coeff_bits = get_bits(gbp, 5);
+        coeff_bits  = get_bits(gbp, 5);
         coeff_shift = get_bits(gbp, 3);
         if (coeff_bits < 1 || coeff_bits > 16) {
             av_log(m->avctx, AV_LOG_ERROR,
