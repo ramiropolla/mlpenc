@@ -1065,7 +1065,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
                 if (get_bits1(&gb)) {
                     /* A restart header should be present */
                     if (read_restart_header(m, &gb, buf, substr) < 0)
-                        goto error;
+                        goto next_substr;
                     m->restart_seen[substr] = 1;
                 }
 
@@ -1073,18 +1073,18 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
                     av_log(m->avctx, AV_LOG_ERROR,
                            "No restart header present in substream %d.\n",
                            substr);
-                    goto error;
+                    goto next_substr;
                 }
 
                 if (read_decoding_params(m, &gb, substr) < 0)
-                    goto error;
+                    goto next_substr;
             }
 
             if (!m->restart_seen[substr]) {
                 av_log(m->avctx, AV_LOG_ERROR,
                        "No restart header present in substream %d.\n",
                        substr);
-                goto error;
+                goto next_substr;
             }
 
             if (read_block_data(m, &gb, substr) < 0)
@@ -1127,6 +1127,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
             return -1;
         }
 
+next_substr:
         buf += substream_data_len[substr];
     }
 
