@@ -657,14 +657,13 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
         }
 
     if (m->param_presence_flags[substr] & PARAM_OUTSHIFT)
-        if (get_bits1(gbp)) {
+        if (get_bits1(gbp))
             for (ch = 0; ch <= m->max_matrix_channel[substr]; ch++) {
                 m->output_shift[substr][ch] = get_bits(gbp, 4);
                 dprintf(m->avctx, "output shift[%d] = %d\n",
                         ch, m->output_shift[substr][ch]);
                 /* TODO: validate */
             }
-        }
 
     if (m->param_presence_flags[substr] & PARAM_QUANTSTEP)
         if (get_bits1(gbp))
