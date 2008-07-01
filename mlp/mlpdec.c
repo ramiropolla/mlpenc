@@ -289,7 +289,7 @@ static inline void calculate_sign_huff(MLPDecodeContext *m, unsigned int substr,
 }
 
 /** Read a sample, consisting of either, both or neither of entropy-coded MSBs
- *  and plain LSBs. Returns INT32_MAX if reading of vlc failed.
+ *  and plain LSBs.
  */
 
 static inline int read_huff_channels(MLPDecodeContext *m, GetBitContext *gbp,
@@ -313,7 +313,7 @@ static inline int read_huff_channels(MLPDecodeContext *m, GetBitContext *gbp,
                           VLC_BITS, (9 + VLC_BITS - 1) / VLC_BITS);
 
     if (result < 0)
-        return INT32_MAX;
+        return -1;
 
     if (lsb_bits > 0)
         result = (result << lsb_bits) + get_bits(gbp, lsb_bits);
@@ -806,7 +806,7 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
            s->blocksize * sizeof(m->bypassed_lsbs[0]));
 
     for (i = 0; i < s->blocksize; i++) {
-        if (read_huff_channels(m, gbp, substr, i) == INT32_MAX)
+        if (read_huff_channels(m, gbp, substr, i) < 0)
             return -1;
     }
 
