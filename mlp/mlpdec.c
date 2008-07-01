@@ -729,10 +729,9 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
  *  read from the data stream, and update the filter state.
  */
 
-static int filter_sample(MLPDecodeContext *m, unsigned int substr,
+static int filter_sample(MLPDecodeContext *m, unsigned int quant_step_size,
                          unsigned int channel, int32_t residual)
 {
-    SubStream *s = &m->substream[substr];
     unsigned int i, j, index;
     int64_t accum = 0;
     int32_t result;
@@ -749,7 +748,7 @@ static int filter_sample(MLPDecodeContext *m, unsigned int substr,
 
     accum = accum >> m->filter_coeff_q[channel][FIR];
     result = (accum + residual)
-                & ~((1 << s->quant_step_size[channel]) - 1);
+                & ~((1 << quant_step_size) - 1);
 
     index = INDEX(channel, FIR, -1);
 
@@ -805,7 +804,7 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
         for (i = 0; i < s->blocksize; i++) {
             int32_t sample = m->sample_buffer[i + s->blockpos][ch];
 
-            sample = filter_sample(m, substr, ch, sample);
+            sample = filter_sample(m, s->quant_step_size[ch], ch, sample);
 
             m->sample_buffer[i + s->blockpos][ch] = sample;
         }
