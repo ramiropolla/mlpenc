@@ -755,7 +755,6 @@ static int filter_sample(MLPDecodeContext *m, unsigned int substr,
     m->filter_state[channel][FIR][index] = result;
     m->filter_index[channel][FIR] = index;
 
-    index = INDEX(channel, IIR, -1);
     m->filter_state[channel][IIR][index] = result - accum;
     m->filter_index[channel][IIR] = index;
 
