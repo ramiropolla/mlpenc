@@ -747,8 +747,7 @@ static int filter_sample(MLPDecodeContext *m, unsigned int quant_step_size,
                      m->filter_coeff[channel][j][i];
 
     accum = accum >> m->filter_coeff_q[channel][FIR];
-    result = (accum + residual)
-                & ~((1 << quant_step_size) - 1);
+    result = (accum + residual) & ~((1 << quant_step_size) - 1);
 
     index = INDEX(channel, FIR, -1);
 
