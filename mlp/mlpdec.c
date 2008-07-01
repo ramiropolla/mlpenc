@@ -752,10 +752,10 @@ static int filter_sample(MLPDecodeContext *m, unsigned int substr,
                 & ~((1 << s->quant_step_size[channel]) - 1);
 
     index = INDEX(channel, FIR, -1);
-    m->filter_state[channel][FIR][index] = result;
-    m->filter_index[channel][FIR] = index;
 
+    m->filter_state[channel][FIR][index] = result;
     m->filter_state[channel][IIR][index] = result - accum;
+    m->filter_index[channel][FIR] = index;
     m->filter_index[channel][IIR] = index;
 
 #undef INDEX
