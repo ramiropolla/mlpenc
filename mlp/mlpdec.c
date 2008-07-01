@@ -769,7 +769,7 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
     }
 
     memset(&m->bypassed_lsbs[m->blockpos[substr]][0], 0,
-           m->blocksize[substr] * MAX_CHANNELS);
+           m->blocksize[substr] * sizeof(m->bypassed_lsbs[0]));
 
     for (i = 0; i < m->blocksize[substr]; i++) {
         for (mat = 0; mat < m->num_primitive_matrices[substr]; mat++)
