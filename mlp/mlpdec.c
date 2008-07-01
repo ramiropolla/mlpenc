@@ -741,29 +741,26 @@ static void filter_channel(MLPDecodeContext *m, unsigned int substr,
 
     for (i = 0; i < s->blocksize; i++) {
         int32_t residual = m->sample_buffer[i + s->blockpos][channel];
+        unsigned int order;
+        int64_t accum = 0;
+        int32_t result;
 
-{
-    int64_t accum = 0;
-    int32_t result;
-    unsigned int order;
+        /* TODO: Move this code to DSPContext? */
 
-    /* TODO: Move this code to DSPContext? */
+        for (j = 0; j < NUM_FILTERS; j++)
+            for (order = 0; order < m->filter_order[channel][j]; order++)
+                accum += (int64_t)m->filter_state_buffer[j][index + order] *
+                        m->filter_coeff[channel][j][order];
 
-    for (j = 0; j < NUM_FILTERS; j++)
-        for (order = 0; order < m->filter_order[channel][j]; order++)
-            accum += (int64_t)m->filter_state_buffer[j][index + order] *
-                     m->filter_coeff[channel][j][order];
+        accum  = accum >> filter_coeff_q;
+        result = (accum + residual) & ~((1 << quant_step_size) - 1);
 
-    accum = accum >> filter_coeff_q;
-    result = (accum + residual) & ~((1 << quant_step_size) - 1);
+        --index;
 
-    --index;
-
-    m->filter_state_buffer[FIR][index] = result;
-    m->filter_state_buffer[IIR][index] = result - accum;
+        m->filter_state_buffer[FIR][index] = result;
+        m->filter_state_buffer[IIR][index] = result - accum;
 
         m->sample_buffer[i + s->blockpos][channel] = result;
-}
     }
 
     for (j = 0; j < NUM_FILTERS; j++) {
