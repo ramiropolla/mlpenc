@@ -897,7 +897,7 @@ static void generate_noise_2(MLPDecodeContext *m, unsigned int substr)
 static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
 {
     SubStream *s = &m->substream[substr];
-    unsigned int mat, dest_ch, src_ch, i;
+    unsigned int mat, src_ch, i;
     unsigned int maxchan;
 
     maxchan = s->max_matrix_channel;
@@ -909,7 +909,7 @@ static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
     }
 
     for (mat = 0; mat < s->num_primitive_matrices; mat++) {
-        dest_ch = s->matrix_ch[mat];
+        unsigned int dest_ch = s->matrix_ch[mat];
 
         /* TODO: DSPContext? */
 
