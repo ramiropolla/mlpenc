@@ -731,6 +731,8 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
     return 0;
 }
 
+#define MSB_MASK(bits)  (-1u << bits)
+
 /** Generate PCM samples using the prediction filters and residual values
  *  read from the data stream, and update the filter state.
  */
@@ -764,7 +766,7 @@ static void filter_channel(MLPDecodeContext *m, unsigned int substr,
                         m->filter_coeff[channel][j][order];
 
         accum  = accum >> filter_coeff_q;
-        result = (accum + residual) & ~((1 << quant_step_size) - 1);
+        result = (accum + residual) & MSB_MASK(quant_step_size);
 
         --index;
 
@@ -926,7 +928,7 @@ static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
                 index = (i * (index * 2 + 1) + index) & (m->access_unit_size_pow2 - 1);
                 accum += m->noise_buffer[index] << (matrix_noise_shift + 7);
             }
-            m->sample_buffer[i][dest_ch] = ((accum >> 14) & ~((1 << quant_step_size) - 1))
+            m->sample_buffer[i][dest_ch] = ((accum >> 14) & MSB_MASK(quant_step_size))
                                              + m->bypassed_lsbs[i][mat];
         }
     }
