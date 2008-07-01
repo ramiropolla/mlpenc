@@ -165,10 +165,9 @@ typedef struct MLPDecodeContext {
     //! Right shift to apply to output of filter
     uint8_t     filter_coeff_q[MAX_CHANNELS][NUM_FILTERS];
 
-    uint8_t     filter_index[MAX_CHANNELS][NUM_FILTERS];
-
     int32_t     filter_coeff[MAX_CHANNELS][NUM_FILTERS][MAX_FILTER_ORDER];
     int32_t     filter_state[MAX_CHANNELS][NUM_FILTERS][MAX_FILTER_ORDER];
+    int32_t     filter_state_buffer       [NUM_FILTERS][MAX_BLOCKSIZE + MAX_FILTER_ORDER];
     //@}
 
     //@{
@@ -510,8 +509,6 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
     memset(s->quant_step_size, 0, sizeof(s->quant_step_size));
 
     for (ch = s->min_channel; ch <= s->max_channel; ch++) {
-        m->filter_index  [ch][FIR] = 0;
-        m->filter_index  [ch][IIR] = 0;
         m->filter_order  [ch][FIR] = 0;
         m->filter_order  [ch][IIR] = 0;
         m->filter_coeff_q[ch][FIR] = 0;
@@ -596,8 +593,6 @@ static int read_filter_params(MLPDecodeContext *m, GetBitContext *gbp,
             for (i = 0; i < order; i++)
                 m->filter_state[channel][filter][i] =
                     get_sbits(gbp, state_bits) << state_shift;
-
-            m->filter_index[channel][filter] = 0;
         }
     }
 
@@ -731,33 +726,26 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
 
 static int filter_sample(MLPDecodeContext *m, unsigned int quant_step_size,
                          unsigned int channel, int32_t residual,
-                         unsigned int filter_coeff_q)
+                         unsigned int filter_coeff_q, unsigned int index)
 {
-    unsigned int i, j, index;
+    unsigned int i, j;
     int64_t accum = 0;
     int32_t result;
 
     /* TODO: Move this code to DSPContext? */
 
-#define INDEX(channel, order, pos) \
-    ((m->filter_index[channel][order] + (pos)) & (MAX_FILTER_ORDER - 1))
-
     for (j = 0; j < NUM_FILTERS; j++)
         for (i = 0; i < m->filter_order[channel][j]; i++)
-            accum += (int64_t)m->filter_state[channel][j][INDEX(channel,j,i)] *
+            accum += (int64_t)m->filter_state_buffer[j][index + i] *
                      m->filter_coeff[channel][j][i];
 
     accum = accum >> filter_coeff_q;
     result = (accum + residual) & ~((1 << quant_step_size) - 1);
 
-    index = INDEX(channel, FIR, -1);
+    --index;
 
-    m->filter_state[channel][FIR][index] = result;
-    m->filter_state[channel][IIR][index] = result - accum;
-    m->filter_index[channel][FIR] = index;
-    m->filter_index[channel][IIR] = index;
-
-#undef INDEX
+    m->filter_state_buffer[FIR][index] = result;
+    m->filter_state_buffer[IIR][index] = result - accum;
 
     return result;
 }
@@ -803,13 +791,27 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
     for (ch = s->min_channel; ch <= s->max_channel; ch++) {
         unsigned int quant_step_size = s->quant_step_size[ch];
         unsigned int filter_coeff_q = m->filter_coeff_q[ch][FIR];
+        int index = MAX_BLOCKSIZE;
+        int j;
+
+        for (j = 0; j < NUM_FILTERS; j++) {
+            memcpy(&m->filter_state_buffer[j][MAX_BLOCKSIZE],
+                   &m->filter_state[ch]   [j][0],
+                   MAX_FILTER_ORDER * sizeof(int32_t));
+        }
 
         for (i = 0; i < s->blocksize; i++) {
             int32_t sample = m->sample_buffer[i + s->blockpos][ch];
 
-            sample = filter_sample(m, quant_step_size, ch, sample, filter_coeff_q);
+            sample = filter_sample(m, quant_step_size, ch, sample, filter_coeff_q, index--);
 
             m->sample_buffer[i + s->blockpos][ch] = sample;
+        }
+
+        for (j = 0; j < NUM_FILTERS; j++) {
+            memcpy(&m->filter_state[ch]   [j][0],
+                   &m->filter_state_buffer[j][index],
+                   MAX_FILTER_ORDER * sizeof(int32_t));
         }
     }
 
