@@ -518,10 +518,10 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
         memset(m->filter_state[ch], 0, sizeof(m->filter_state[ch]));
 
         /* Default audio coding is 24-bit raw PCM */
-        m->huff_offset[ch]      = 0;
+        m->huff_offset     [ch] = 0;
         m->sign_huff_offset[ch] = (-1) << 23;
-        m->codebook[ch]         = 0;
-        m->huff_lsbs[ch]        = 24;
+        m->codebook        [ch] = 0;
+        m->huff_lsbs       [ch] = 24;
     }
 
     if (substr == m->max_decoded_substream) {
