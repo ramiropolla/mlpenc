@@ -909,6 +909,7 @@ static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
     }
 
     for (mat = 0; mat < s->num_primitive_matrices; mat++) {
+        int matrix_noise_shift = s->matrix_noise_shift[mat];
         unsigned int dest_ch = s->matrix_ch[mat];
         int quant_step_size = s->quant_step_size[dest_ch];
 
@@ -920,10 +921,10 @@ static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
                 accum += (int64_t)m->sample_buffer[i][src_ch]
                                   * s->matrix_coeff[mat][src_ch];
             }
-            if (s->matrix_noise_shift[mat]) {
+            if (matrix_noise_shift) {
                 uint32_t index = s->num_primitive_matrices - mat;
                 index = (i * (index * 2 + 1) + index) & (m->access_unit_size_pow2 - 1);
-                accum += m->noise_buffer[index] << (s->matrix_noise_shift[mat] + 7);
+                accum += m->noise_buffer[index] << (matrix_noise_shift + 7);
             }
             m->sample_buffer[i][dest_ch] = ((accum >> 14) & ~((1 << quant_step_size) - 1))
                                              + m->bypassed_lsbs[i][mat];
