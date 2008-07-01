@@ -801,10 +801,12 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
     }
 
     for (ch = s->min_channel; ch <= s->max_channel; ch++) {
+        unsigned int quant_step_size = s->quant_step_size[ch];
+
         for (i = 0; i < s->blocksize; i++) {
             int32_t sample = m->sample_buffer[i + s->blockpos][ch];
 
-            sample = filter_sample(m, s->quant_step_size[ch], ch, sample);
+            sample = filter_sample(m, quant_step_size, ch, sample);
 
             m->sample_buffer[i + s->blockpos][ch] = sample;
         }
