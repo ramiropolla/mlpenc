@@ -731,13 +731,14 @@ static int filter_sample(MLPDecodeContext *m, unsigned int quant_step_size,
     unsigned int i, j;
     int64_t accum = 0;
     int32_t result;
+    unsigned int order;
 
     /* TODO: Move this code to DSPContext? */
 
     for (j = 0; j < NUM_FILTERS; j++)
-        for (i = 0; i < m->filter_order[channel][j]; i++)
-            accum += (int64_t)m->filter_state_buffer[j][index + i] *
-                     m->filter_coeff[channel][j][i];
+        for (order = 0; order < m->filter_order[channel][j]; order++)
+            accum += (int64_t)m->filter_state_buffer[j][index + order] *
+                     m->filter_coeff[channel][j][order];
 
     accum = accum >> filter_coeff_q;
     result = (accum + residual) & ~((1 << quant_step_size) - 1);
