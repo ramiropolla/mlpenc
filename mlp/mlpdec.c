@@ -292,10 +292,17 @@ static inline void calculate_sign_huff(MLPDecodeContext *m, unsigned int substr,
  *  and plain LSBs. Returns INT32_MAX if reading of vlc failed.
  */
 
-static inline int read_huff(MLPDecodeContext *m, GetBitContext *gbp,
-                            unsigned int substr, unsigned int channel)
+static inline int read_huff_channels(MLPDecodeContext *m, GetBitContext *gbp,
+                                     unsigned int substr, unsigned int pos)
 {
     SubStream *s = &m->substream[substr];
+    unsigned int mat, channel;
+
+    for (mat = 0; mat < s->num_primitive_matrices; mat++)
+        if (s->lsb_bypass[mat])
+            m->bypassed_lsbs[pos + s->blockpos][mat] = get_bits1(gbp);
+
+    for (channel = s->min_channel; channel <= s->max_channel; channel++) {
     int codebook = m->codebook[channel];
     int quant_step_size = s->quant_step_size[channel];
     int lsb_bits = m->huff_lsbs[channel] - quant_step_size;
@@ -313,7 +320,12 @@ static inline int read_huff(MLPDecodeContext *m, GetBitContext *gbp,
 
     result += m->sign_huff_offset[channel];
 
-    return result << quant_step_size;
+    result <<= quant_step_size;
+
+        m->sample_buffer[pos + s->blockpos][channel] = result;
+    }
+
+    return 0;
 }
 
 static int mlp_decode_init(AVCodecContext *avctx)
@@ -777,7 +789,7 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
                            unsigned int substr)
 {
     SubStream *s = &m->substream[substr];
-    unsigned int i, mat, ch, expected_stream_pos = 0;
+    unsigned int i, ch, expected_stream_pos = 0;
 
     if (s->data_check_present) {
         expected_stream_pos = get_bits_count(gbp) + get_bits(gbp, 16);
@@ -794,18 +806,8 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
            s->blocksize * sizeof(m->bypassed_lsbs[0]));
 
     for (i = 0; i < s->blocksize; i++) {
-        for (mat = 0; mat < s->num_primitive_matrices; mat++)
-            if (s->lsb_bypass[mat])
-                m->bypassed_lsbs[i + s->blockpos][mat] = get_bits1(gbp);
-
-        for (ch = s->min_channel; ch <= s->max_channel; ch++) {
-            int32_t sample = read_huff(m, gbp, substr, ch);
-
-            if (sample == INT32_MAX)
-                return -1;
-
-            m->sample_buffer[i + s->blockpos][ch] = sample;
-        }
+        if (read_huff_channels(m, gbp, substr, i) == INT32_MAX)
+            return -1;
     }
 
     for (ch = s->min_channel; ch <= s->max_channel; ch++) {
