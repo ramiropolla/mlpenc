@@ -66,6 +66,74 @@ static const char* sample_message =
     "http://ffmpeg.mplayerhq.hu/bugreports.html and include "
     "a sample of this file.";
 
+typedef struct SubStream {
+    //! For each substream, whether a restart header has been read
+    uint8_t     restart_seen;
+
+    //@{
+    /** Restart header data */
+    //! The sync word used at the start of the last restart header
+    uint16_t    restart_sync_word;
+
+    //! The index of the first channel coded in this substream
+    uint8_t     min_channel;
+    //! The index of the last channel coded in this substream
+    uint8_t     max_channel;
+    //! The number of channels input into the rematrix stage
+    uint8_t     max_matrix_channel;
+
+    //! The left shift applied to random noise in 0x31ea substreams
+    uint8_t     noise_shift;
+    //! The current seed value for the pseudorandom noise generator(s)
+    uint32_t    noisegen_seed;
+
+    //! Does this substream contain extra info to check the size of VLC blocks?
+    uint8_t     data_check_present;
+
+    //! Bitmask of which parameter sets are conveyed in a decoding parameter block
+    uint8_t     param_presence_flags;
+#define PARAM_BLOCKSIZE     (1 << 7)
+#define PARAM_MATRIX        (1 << 6)
+#define PARAM_OUTSHIFT      (1 << 5)
+#define PARAM_QUANTSTEP     (1 << 4)
+#define PARAM_FIR           (1 << 3)
+#define PARAM_IIR           (1 << 2)
+#define PARAM_HUFFOFFSET    (1 << 1)
+    //@}
+
+    //@{
+    /** Matrix data */
+
+    //! Number of matrices to be applied
+    uint8_t     num_primitive_matrices;
+
+    //! Output channel of matrix
+    uint8_t     matrix_ch[MAX_MATRICES];
+
+    //! Whether the LSBs of the matrix output are encoded in the bitstream
+    uint8_t     lsb_bypass[MAX_MATRICES];
+    //! Matrix coefficients, stored as 2.14 fixed point
+    int32_t     matrix_coeff[MAX_MATRICES][MAX_CHANNELS+2];
+    //! Left shift to apply to noise values in 0x31eb substreams
+    uint8_t     matrix_noise_shift[MAX_MATRICES];
+    //@}
+
+    //! Left shift to apply to huffman-decoded residuals
+    uint8_t     quant_step_size[MAX_CHANNELS];
+
+    //! Number of PCM samples in current audio block
+    uint16_t    blocksize;
+    //! Number of PCM samples decoded so far in this frame
+    uint16_t    blockpos;
+
+    //! Left shift to apply to decoded PCM values to get final 24-bit output
+    int8_t      output_shift[MAX_CHANNELS];
+
+    //! Running XOR of all output samples
+    int32_t     lossless_check_data;
+
+} SubStream;
+
 typedef struct MLPDecodeContext {
     AVCodecContext *avctx;
 
@@ -83,67 +151,7 @@ typedef struct MLPDecodeContext {
     //! Next power of two above the number of samples in each frame
     int         access_unit_size_pow2;
 
-    //! For each substream, whether a restart header has been read
-    uint8_t     restart_seen[MAX_SUBSTREAMS];
-
-    //@{
-    /** Restart header data */
-    //! The sync word used at the start of the last restart header
-    uint16_t    restart_sync_word[MAX_SUBSTREAMS];
-
-    //! The index of the first channel coded in this substream
-    uint8_t     min_channel[MAX_SUBSTREAMS];
-    //! The index of the last channel coded in this substream
-    uint8_t     max_channel[MAX_SUBSTREAMS];
-    //! The number of channels input into the rematrix stage
-    uint8_t     max_matrix_channel[MAX_SUBSTREAMS];
-
-    //! The left shift applied to random noise in 0x31ea substreams
-    uint8_t     noise_shift[MAX_SUBSTREAMS];
-    //! The current seed value for the pseudorandom noise generator(s)
-    uint32_t    noisegen_seed[MAX_SUBSTREAMS];
-
-    //! Does this substream contain extra info to check the size of VLC blocks?
-    uint8_t     data_check_present[MAX_SUBSTREAMS];
-
-    //! Bitmask of which parameter sets are conveyed in a decoding parameter block
-    uint8_t     param_presence_flags[MAX_SUBSTREAMS];
-#define PARAM_BLOCKSIZE     (1 << 7)
-#define PARAM_MATRIX        (1 << 6)
-#define PARAM_OUTSHIFT      (1 << 5)
-#define PARAM_QUANTSTEP     (1 << 4)
-#define PARAM_FIR           (1 << 3)
-#define PARAM_IIR           (1 << 2)
-#define PARAM_HUFFOFFSET    (1 << 1)
-    //@}
-
-    //@{
-    /** Matrix data */
-
-    //! Number of matrices to be applied
-    uint8_t     num_primitive_matrices[MAX_SUBSTREAMS];
-
-    //! Output channel of matrix
-    uint8_t     matrix_ch[MAX_SUBSTREAMS][MAX_MATRICES];
-
-    //! Whether the LSBs of the matrix output are encoded in the bitstream
-    uint8_t     lsb_bypass[MAX_SUBSTREAMS][MAX_MATRICES];
-    //! Matrix coefficients, stored as 2.14 fixed point
-    int32_t     matrix_coeff[MAX_SUBSTREAMS][MAX_MATRICES][MAX_CHANNELS+2];
-    //! Left shift to apply to noise values in 0x31eb substreams
-    uint8_t     matrix_noise_shift[MAX_SUBSTREAMS][MAX_MATRICES];
-    //@}
-
-    //! Left shift to apply to huffman-decoded residuals
-    uint8_t     quant_step_size[MAX_SUBSTREAMS][MAX_CHANNELS];
-
-    //! Number of PCM samples in current audio block
-    uint16_t    blocksize[MAX_SUBSTREAMS];
-    //! Number of PCM samples decoded so far in this frame
-    uint16_t    blockpos[MAX_SUBSTREAMS];
-
-    //! Left shift to apply to decoded PCM values to get final 24-bit output
-    int8_t      output_shift[MAX_SUBSTREAMS][MAX_CHANNELS];
+    SubStream   substream[MAX_SUBSTREAMS];
 
     //@{
     /** Filter data. */
@@ -171,9 +179,6 @@ typedef struct MLPDecodeContext {
     //! Size of residual suffix not encoded using VLC
     uint8_t     huff_lsbs[MAX_CHANNELS];
     //@}
-
-    //! Running XOR of all output samples
-    int32_t     lossless_check_data[MAX_SUBSTREAMS];
 
     int8_t      noise_buffer[MAX_BLOCKSIZE_POW2];
     int8_t      bypassed_lsbs[MAX_BLOCKSIZE][MAX_CHANNELS];
@@ -268,7 +273,8 @@ static uint8_t mlp_restart_checksum(const uint8_t *buf, unsigned int bit_size)
 static inline void calculate_sign_huff(MLPDecodeContext *m, unsigned int substr,
                                        unsigned int ch)
 {
-    int lsb_bits = m->huff_lsbs[ch] - m->quant_step_size[substr][ch];
+    SubStream *s = &m->substream[substr];
+    int lsb_bits = m->huff_lsbs[ch] - s->quant_step_size[ch];
     int sign_shift = lsb_bits + (m->codebook[ch] ? 2 - m->codebook[ch] : -1);
 
     m->sign_huff_offset[ch] = m->huff_offset[ch];
@@ -287,8 +293,9 @@ static inline void calculate_sign_huff(MLPDecodeContext *m, unsigned int substr,
 static inline int read_huff(MLPDecodeContext *m, GetBitContext *gbp,
                             unsigned int substr, unsigned int channel)
 {
+    SubStream *s = &m->substream[substr];
     int codebook = m->codebook[channel];
-    int quant_step_size = m->quant_step_size[substr][channel];
+    int quant_step_size = s->quant_step_size[channel];
     int lsb_bits = m->huff_lsbs[channel] - quant_step_size;
     int result = 0;
 
@@ -310,10 +317,12 @@ static inline int read_huff(MLPDecodeContext *m, GetBitContext *gbp,
 static int mlp_decode_init(AVCodecContext *avctx)
 {
     MLPDecodeContext *m = avctx->priv_data;
+    int substr;
 
     init_static();
     m->avctx = avctx;
-    memset(m->lossless_check_data, 0xff, sizeof(m->lossless_check_data));
+    for (substr = 0; substr < MAX_SUBSTREAMS; substr++)
+        m->substream[substr].lossless_check_data = 0xffffffff;
     return 0;
 }
 
@@ -325,6 +334,7 @@ static int mlp_decode_init(AVCodecContext *avctx)
 static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
 {
     MLPHeaderInfo mh;
+    int substr;
 
     if (ff_mlp_read_major_sync(m->avctx, &mh, gb) != 0)
         return -1;
@@ -394,7 +404,8 @@ static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
 #endif
 
     m->params_valid = 1;
-    memset(m->restart_seen, 0, sizeof(m->restart_seen));
+    for (substr = 0; substr < MAX_SUBSTREAMS; substr++)
+        m->substream[substr].restart_seen = 0;
 
     return 0;
 }
@@ -407,6 +418,7 @@ static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
 static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
                                const uint8_t *buf, unsigned int substr)
 {
+    SubStream *s = &m->substream[substr];
     unsigned int ch;
     int sync_word, tmp;
     uint8_t checksum;
@@ -420,40 +432,40 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
                "Restart header sync incorrect (got 0x%04x)\n", sync_word);
         return -1;
     }
-    m->restart_sync_word[substr] = sync_word;
+    s->restart_sync_word = sync_word;
 
     skip_bits(gbp, 16); /* Output timestamp */
 
-    m->min_channel       [substr] = get_bits(gbp, 4);
-    m->max_channel       [substr] = get_bits(gbp, 4);
-    m->max_matrix_channel[substr] = get_bits(gbp, 4);
+    s->min_channel        = get_bits(gbp, 4);
+    s->max_channel        = get_bits(gbp, 4);
+    s->max_matrix_channel = get_bits(gbp, 4);
 
-    if (m->min_channel[substr] > m->max_channel[substr]) {
+    if (s->min_channel > s->max_channel) {
         av_log(m->avctx, AV_LOG_ERROR,
                "Substream min channel cannot be greater than max channel.\n");
         return -1;
     }
 
     if (m->avctx->request_channels > 0
-        && m->max_channel[substr] + 1 >= m->avctx->request_channels
+        && s->max_channel + 1 >= m->avctx->request_channels
         && substr < m->max_decoded_substream) {
         av_log(m->avctx, AV_LOG_INFO,
                "Extracting %d channel downmix from substream %d. "
                "Further substreams will be skipped.\n",
-               m->max_channel[substr] + 1, substr);
+               s->max_channel + 1, substr);
         m->max_decoded_substream = substr;
     }
 
-    m->noise_shift  [substr] = get_bits(gbp, 4);
-    m->noisegen_seed[substr] = get_bits(gbp, 23);
+    s->noise_shift   = get_bits(gbp,  4);
+    s->noisegen_seed = get_bits(gbp, 23);
 
     skip_bits(gbp, 19);
 
-    m->data_check_present[substr] = get_bits1(gbp);
+    s->data_check_present = get_bits1(gbp);
     lossless_check = get_bits(gbp, 8);
     if (substr == m->max_decoded_substream
-        && m->lossless_check_data[substr] != 0xffffffff) {
-        tmp = m->lossless_check_data[substr];
+        && s->lossless_check_data != 0xffffffff) {
+        tmp = s->lossless_check_data;
         tmp ^= tmp >> 16;
         tmp ^= tmp >> 8;
         tmp &= 0xff;
@@ -468,7 +480,7 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
 
     skip_bits(gbp, 16);
 
-    for (ch = 0; ch <= m->max_matrix_channel[substr]; ch++) {
+    for (ch = 0; ch <= s->max_matrix_channel; ch++) {
         int ch_assign = get_bits(gbp, 6);
         dprintf(m->avctx, "ch_assign[%d][%d] = %d\n", substr, ch,
                 ch_assign);
@@ -486,15 +498,15 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
         av_log(m->avctx, AV_LOG_ERROR, "Restart header checksum error\n");
 
     /* Set default decoding parameters */
-    m->param_presence_flags  [substr] = 0xff;
-    m->num_primitive_matrices[substr] = 0;
-    m->blocksize             [substr] = 8;
-    m->lossless_check_data   [substr] = 0;
+    s->param_presence_flags   = 0xff;
+    s->num_primitive_matrices = 0;
+    s->blocksize              = 8;
+    s->lossless_check_data    = 0;
 
-    memset(m->output_shift   [substr], 0, sizeof(m->output_shift   [substr]));
-    memset(m->quant_step_size[substr], 0, sizeof(m->quant_step_size[substr]));
+    memset(s->output_shift   , 0, sizeof(s->output_shift   ));
+    memset(s->quant_step_size, 0, sizeof(s->quant_step_size));
 
-    for (ch = m->min_channel[substr]; ch <= m->max_channel[substr]; ch++) {
+    for (ch = s->min_channel; ch <= s->max_channel; ch++) {
         m->filter_index  [ch][FIR] = 0;
         m->filter_index  [ch][IIR] = 0;
         m->filter_order  [ch][FIR] = 0;
@@ -513,7 +525,7 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
     }
 
     if (substr == m->max_decoded_substream) {
-        m->avctx->channels = m->max_channel[substr] + 1;
+        m->avctx->channels = s->max_channel + 1;
     }
 
     return 0;
@@ -596,35 +608,36 @@ static int read_filter_params(MLPDecodeContext *m, GetBitContext *gbp,
 static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                                 unsigned int substr)
 {
+    SubStream *s = &m->substream[substr];
     unsigned int mat, ch;
 
     if (get_bits1(gbp))
-        m->param_presence_flags[substr] = get_bits(gbp, 8);
+        s->param_presence_flags = get_bits(gbp, 8);
 
-    if (m->param_presence_flags[substr] & PARAM_BLOCKSIZE)
+    if (s->param_presence_flags & PARAM_BLOCKSIZE)
         if (get_bits1(gbp)) {
-            m->blocksize[substr] = get_bits(gbp, 9);
-            if (m->blocksize[substr] > MAX_BLOCKSIZE) {
+            s->blocksize = get_bits(gbp, 9);
+            if (s->blocksize > MAX_BLOCKSIZE) {
                 av_log(m->avctx, AV_LOG_ERROR, "Block size too large\n");
-                m->blocksize[substr] = 0;
+                s->blocksize = 0;
                 return -1;
             }
         }
 
-    if (m->param_presence_flags[substr] & PARAM_MATRIX)
+    if (s->param_presence_flags & PARAM_MATRIX)
         if (get_bits1(gbp)) {
-            m->num_primitive_matrices[substr] = get_bits(gbp, 4);
+            s->num_primitive_matrices = get_bits(gbp, 4);
 
-            for (mat = 0; mat < m->num_primitive_matrices[substr]; mat++) {
+            for (mat = 0; mat < s->num_primitive_matrices; mat++) {
                 int frac_bits, max_chan;
-                m->matrix_ch[substr][mat] = get_bits(gbp, 4);
+                s->matrix_ch[mat] = get_bits(gbp, 4);
                 frac_bits = get_bits(gbp, 4);
-                m->lsb_bypass[substr][mat] = get_bits1(gbp);
+                s->lsb_bypass[mat] = get_bits1(gbp);
 
-                if (m->matrix_ch[substr][mat] > m->max_channel[substr]) {
+                if (s->matrix_ch[mat] > s->max_channel) {
                     av_log(m->avctx, AV_LOG_ERROR,
                            "Invalid channel %d specified as output from matrix\n",
-                           m->matrix_ch[substr][mat]);
+                           s->matrix_ch[mat]);
                     return -1;
                 }
                 if (frac_bits > 14) {
@@ -633,8 +646,8 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                     return -1;
                 }
 
-                max_chan = m->max_matrix_channel[substr];
-                if (m->restart_sync_word[substr] == 0x31ea)
+                max_chan = s->max_matrix_channel;
+                if (s->restart_sync_word == 0x31ea)
                     max_chan+=2;
 
                 for (ch = 0; ch <= max_chan; ch++) {
@@ -642,42 +655,42 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                     if (get_bits1(gbp))
                         coeff_val = get_sbits(gbp, frac_bits + 2);
 
-                    m->matrix_coeff[substr][mat][ch] = coeff_val << (14 - frac_bits);
+                    s->matrix_coeff[mat][ch] = coeff_val << (14 - frac_bits);
                 }
 
-                if (m->restart_sync_word[substr] == 0x31eb)
-                    m->matrix_noise_shift[substr][mat] = get_bits(gbp, 4);
+                if (s->restart_sync_word == 0x31eb)
+                    s->matrix_noise_shift[mat] = get_bits(gbp, 4);
                 else
-                    m->matrix_noise_shift[substr][mat] = 0;
+                    s->matrix_noise_shift[mat] = 0;
             }
         }
 
-    if (m->param_presence_flags[substr] & PARAM_OUTSHIFT)
+    if (s->param_presence_flags & PARAM_OUTSHIFT)
         if (get_bits1(gbp))
-            for (ch = 0; ch <= m->max_matrix_channel[substr]; ch++) {
-                m->output_shift[substr][ch] = get_bits(gbp, 4);
+            for (ch = 0; ch <= s->max_matrix_channel; ch++) {
+                s->output_shift[ch] = get_bits(gbp, 4);
                 dprintf(m->avctx, "output shift[%d] = %d\n",
-                        ch, m->output_shift[substr][ch]);
+                        ch, s->output_shift[ch]);
                 /* TODO: validate */
             }
 
-    if (m->param_presence_flags[substr] & PARAM_QUANTSTEP)
+    if (s->param_presence_flags & PARAM_QUANTSTEP)
         if (get_bits1(gbp))
-            for (ch = 0; ch <= m->max_channel[substr]; ch++) {
-                m->quant_step_size[substr][ch] = get_bits(gbp, 4);
+            for (ch = 0; ch <= s->max_channel; ch++) {
+                s->quant_step_size[ch] = get_bits(gbp, 4);
                 /* TODO: validate */
 
                 calculate_sign_huff(m, substr, ch);
             }
 
-    for (ch = m->min_channel[substr]; ch <= m->max_channel[substr]; ch++)
+    for (ch = s->min_channel; ch <= s->max_channel; ch++)
         if (get_bits1(gbp)) {
-            if (m->param_presence_flags[substr] & PARAM_FIR)
+            if (s->param_presence_flags & PARAM_FIR)
                 if (get_bits1(gbp))
                     if (read_filter_params(m, gbp, ch, FIR) < 0)
                         return -1;
 
-            if (m->param_presence_flags[substr] & PARAM_IIR)
+            if (s->param_presence_flags & PARAM_IIR)
                 if (get_bits1(gbp))
                     if (read_filter_params(m, gbp, ch, IIR) < 0)
                         return -1;
@@ -694,7 +707,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
             if (!m->filter_order[ch][FIR] && m->filter_order[ch][IIR])
                 m->filter_coeff_q[ch][FIR] = m->filter_coeff_q[ch][IIR];
 
-            if (m->param_presence_flags[substr] & PARAM_HUFFOFFSET)
+            if (s->param_presence_flags & PARAM_HUFFOFFSET)
                 if (get_bits1(gbp))
                     m->huff_offset[ch] = get_sbits(gbp, 15);
 
@@ -716,6 +729,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
 static int filter_sample(MLPDecodeContext *m, unsigned int substr,
                          unsigned int channel, int32_t residual)
 {
+    SubStream *s = &m->substream[substr];
     unsigned int i, j, index;
     int64_t accum = 0;
     int32_t result;
@@ -732,7 +746,7 @@ static int filter_sample(MLPDecodeContext *m, unsigned int substr,
 
     accum = accum >> m->filter_coeff_q[channel][FIR];
     result = (accum + residual)
-                & ~((1 << m->quant_step_size[substr][channel]) - 1);
+                & ~((1 << s->quant_step_size[channel]) - 1);
 
     index = INDEX(channel, FIR, -1);
     m->filter_state[channel][FIR][index] = result;
@@ -753,28 +767,29 @@ static int filter_sample(MLPDecodeContext *m, unsigned int substr,
 static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
                            unsigned int substr)
 {
+    SubStream *s = &m->substream[substr];
     unsigned int i, mat, ch, expected_stream_pos = 0;
 
-    if (m->data_check_present[substr]) {
+    if (s->data_check_present) {
         expected_stream_pos = get_bits_count(gbp) + get_bits(gbp, 16);
         av_log(m->avctx, AV_LOG_WARNING, "This file contains some features "
                "we have not tested yet. %s\n", sample_message);
     }
 
-    if (m->blockpos[substr] + m->blocksize[substr] > m->access_unit_size) {
+    if (s->blockpos + s->blocksize > m->access_unit_size) {
         av_log(m->avctx, AV_LOG_ERROR, "Too many audio samples in frame\n");
         return -1;
     }
 
-    memset(&m->bypassed_lsbs[m->blockpos[substr]][0], 0,
-           m->blocksize[substr] * sizeof(m->bypassed_lsbs[0]));
+    memset(&m->bypassed_lsbs[s->blockpos][0], 0,
+           s->blocksize * sizeof(m->bypassed_lsbs[0]));
 
-    for (i = 0; i < m->blocksize[substr]; i++) {
-        for (mat = 0; mat < m->num_primitive_matrices[substr]; mat++)
-            if (m->lsb_bypass[substr][mat])
-                m->bypassed_lsbs[i + m->blockpos[substr]][mat] = get_bits1(gbp);
+    for (i = 0; i < s->blocksize; i++) {
+        for (mat = 0; mat < s->num_primitive_matrices; mat++)
+            if (s->lsb_bypass[mat])
+                m->bypassed_lsbs[i + s->blockpos][mat] = get_bits1(gbp);
 
-        for (ch = m->min_channel[substr]; ch <= m->max_channel[substr]; ch++) {
+        for (ch = s->min_channel; ch <= s->max_channel; ch++) {
             int32_t sample = read_huff(m, gbp, substr, ch);
 
             if (sample == INT32_MAX)
@@ -782,13 +797,13 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
 
             sample = filter_sample(m, substr, ch, sample);
 
-            m->sample_buffer[i + m->blockpos[substr]][ch] = sample;
+            m->sample_buffer[i + s->blockpos][ch] = sample;
         }
     }
 
-    m->blockpos[substr] += m->blocksize[substr];
+    s->blockpos += s->blocksize;
 
-    if (m->data_check_present[substr]) {
+    if (s->data_check_present) {
         if (get_bits_count(gbp) != expected_stream_pos)
             av_log(m->avctx, AV_LOG_ERROR, "Block data length mismatch\n");
         skip_bits(gbp, 8);
@@ -830,27 +845,29 @@ static const int8_t noise_table[256] = {
 
 static void generate_noise_1(MLPDecodeContext *m, unsigned int substr)
 {
+    SubStream *s = &m->substream[substr];
     unsigned int i;
-    uint32_t seed = m->noisegen_seed[substr];
-    unsigned int maxchan = m->max_matrix_channel[substr];
+    uint32_t seed = s->noisegen_seed;
+    unsigned int maxchan = s->max_matrix_channel;
 
-    for (i = 0; i < m->blockpos[substr]; i++) {
+    for (i = 0; i < s->blockpos; i++) {
         uint16_t seed_shr7 = seed >> 7;
-        m->sample_buffer[i][maxchan+1] = ((int8_t)(seed >> 15)) << m->noise_shift[substr];
-        m->sample_buffer[i][maxchan+2] = ((int8_t) seed_shr7)   << m->noise_shift[substr];
+        m->sample_buffer[i][maxchan+1] = ((int8_t)(seed >> 15)) << s->noise_shift;
+        m->sample_buffer[i][maxchan+2] = ((int8_t) seed_shr7)   << s->noise_shift;
 
         seed = (seed << 16) ^ seed_shr7 ^ (seed_shr7 << 5);
     }
 
-    m->noisegen_seed[substr] = seed;
+    s->noisegen_seed = seed;
 }
 
 /** Generate a block of noise, used when restart_sync_word == 0x31eb. */
 
 static void generate_noise_2(MLPDecodeContext *m, unsigned int substr)
 {
+    SubStream *s = &m->substream[substr];
     unsigned int i;
-    uint32_t seed = m->noisegen_seed[substr];
+    uint32_t seed = s->noisegen_seed;
 
     for (i = 0; i < m->access_unit_size_pow2; i++) {
         uint8_t seed_shr15 = seed >> 15;
@@ -858,7 +875,7 @@ static void generate_noise_2(MLPDecodeContext *m, unsigned int substr)
         seed = (seed << 8) ^ seed_shr15 ^ (seed_shr15 << 5);
     }
 
-    m->noisegen_seed[substr] = seed;
+    s->noisegen_seed = seed;
 }
 
 
@@ -867,34 +884,35 @@ static void generate_noise_2(MLPDecodeContext *m, unsigned int substr)
 
 static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
 {
+    SubStream *s = &m->substream[substr];
     unsigned int mat, dest_ch, src_ch, i;
     unsigned int maxchan;
 
-    maxchan = m->max_matrix_channel[substr];
-    if (m->restart_sync_word[substr] == 0x31ea) {
+    maxchan = s->max_matrix_channel;
+    if (s->restart_sync_word == 0x31ea) {
         generate_noise_1(m, substr);
         maxchan += 2;
     } else {
         generate_noise_2(m, substr);
     }
 
-    for (mat = 0; mat < m->num_primitive_matrices[substr]; mat++) {
-        dest_ch = m->matrix_ch[substr][mat];
+    for (mat = 0; mat < s->num_primitive_matrices; mat++) {
+        dest_ch = s->matrix_ch[mat];
 
         /* TODO: DSPContext? */
 
-        for (i = 0; i < m->blockpos[substr]; i++) {
+        for (i = 0; i < s->blockpos; i++) {
             int64_t accum = 0;
             for (src_ch = 0; src_ch <= maxchan; src_ch++) {
                 accum += (int64_t)m->sample_buffer[i][src_ch]
-                                  * m->matrix_coeff[substr][mat][src_ch];
+                                  * s->matrix_coeff[mat][src_ch];
             }
-            if (m->matrix_noise_shift[substr][mat]) {
-                uint32_t index = m->num_primitive_matrices[substr] - mat;
+            if (s->matrix_noise_shift[mat]) {
+                uint32_t index = s->num_primitive_matrices - mat;
                 index = (i * (index * 2 + 1) + index) & (m->access_unit_size_pow2 - 1);
-                accum += m->noise_buffer[index] << (m->matrix_noise_shift[substr][mat] + 7);
+                accum += m->noise_buffer[index] << (s->matrix_noise_shift[mat] + 7);
             }
-            m->sample_buffer[i][dest_ch] = ((accum >> 14) & ~((1 << m->quant_step_size[substr][dest_ch]) - 1))
+            m->sample_buffer[i][dest_ch] = ((accum >> 14) & ~((1 << s->quant_step_size[dest_ch]) - 1))
                                              + m->bypassed_lsbs[i][mat];
         }
     }
@@ -906,18 +924,18 @@ static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
 static int output_data_internal(MLPDecodeContext *m, unsigned int substr,
                                 uint8_t *data, unsigned int *data_size, int is32)
 {
+    SubStream *s = &m->substream[substr];
     unsigned int i, ch = 0;
     int32_t *data_32 = (int32_t*) data;
     int16_t *data_16 = (int16_t*) data;
 
-    if (*data_size < (m->max_channel[substr] + 1) * m->blockpos[substr]
-                      * (is32 ? 4 : 2))
+    if (*data_size < (s->max_channel + 1) * s->blockpos * (is32 ? 4 : 2))
         return -1;
 
-    for (i = 0; i < m->blockpos[substr]; i++) {
-        for (ch = 0; ch <= m->max_channel[substr]; ch++) {
-            int32_t sample = m->sample_buffer[i][ch] << m->output_shift[substr][ch];
-            m->lossless_check_data[substr] ^= (sample & 0xffffff) << ch;
+    for (i = 0; i < s->blockpos; i++) {
+        for (ch = 0; ch <= s->max_channel; ch++) {
+            int32_t sample = m->sample_buffer[i][ch] << s->output_shift[ch];
+            s->lossless_check_data ^= (sample & 0xffffff) << ch;
             if (is32) *data_32++ = sample << 8;
             else      *data_16++ = sample >> 8;
         }
@@ -1055,19 +1073,20 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
     buf += header_size + substr_header_size;
 
     for (substr = 0; substr <= m->max_decoded_substream; substr++) {
+        SubStream *s = &m->substream[substr];
         init_get_bits(&gb, buf, substream_data_len[substr] * 8);
 
-        m->blockpos[substr] = 0;
+        s->blockpos = 0;
         do {
             if (get_bits1(&gb)) {
                 if (get_bits1(&gb)) {
                     /* A restart header should be present */
                     if (read_restart_header(m, &gb, buf, substr) < 0)
                         goto next_substr;
-                    m->restart_seen[substr] = 1;
+                    s->restart_seen = 1;
                 }
 
-                if (!m->restart_seen[substr]) {
+                if (!s->restart_seen) {
                     av_log(m->avctx, AV_LOG_ERROR,
                            "No restart header present in substream %d.\n",
                            substr);
@@ -1078,7 +1097,7 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
                     goto next_substr;
             }
 
-            if (!m->restart_seen[substr]) {
+            if (!s->restart_seen) {
                 av_log(m->avctx, AV_LOG_ERROR,
                        "No restart header present in substream %d.\n",
                        substr);
@@ -1101,8 +1120,8 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
 
             if (get_bits1(&gb)) {
                 int shorten_by = get_bits(&gb, 13);
-                shorten_by = FFMIN(shorten_by, m->blockpos[substr]);
-                m->blockpos[substr] -= shorten_by;
+                shorten_by = FFMIN(shorten_by, s->blockpos);
+                s->blockpos -= shorten_by;
             } else
                 skip_bits(&gb, 13);
         }
