@@ -730,7 +730,8 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
  */
 
 static int filter_sample(MLPDecodeContext *m, unsigned int quant_step_size,
-                         unsigned int channel, int32_t residual)
+                         unsigned int channel, int32_t residual,
+                         unsigned int filter_coeff_q)
 {
     unsigned int i, j, index;
     int64_t accum = 0;
@@ -746,7 +747,7 @@ static int filter_sample(MLPDecodeContext *m, unsigned int quant_step_size,
             accum += (int64_t)m->filter_state[channel][j][INDEX(channel,j,i)] *
                      m->filter_coeff[channel][j][i];
 
-    accum = accum >> m->filter_coeff_q[channel][FIR];
+    accum = accum >> filter_coeff_q;
     result = (accum + residual) & ~((1 << quant_step_size) - 1);
 
     index = INDEX(channel, FIR, -1);
@@ -801,11 +802,12 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
 
     for (ch = s->min_channel; ch <= s->max_channel; ch++) {
         unsigned int quant_step_size = s->quant_step_size[ch];
+        unsigned int filter_coeff_q = m->filter_coeff_q[ch][FIR];
 
         for (i = 0; i < s->blocksize; i++) {
             int32_t sample = m->sample_buffer[i + s->blockpos][ch];
 
-            sample = filter_sample(m, quant_step_size, ch, sample);
+            sample = filter_sample(m, quant_step_size, ch, sample, filter_coeff_q);
 
             m->sample_buffer[i + s->blockpos][ch] = sample;
         }
