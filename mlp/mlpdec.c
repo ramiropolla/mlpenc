@@ -52,6 +52,9 @@
 /** The next power of two greater than MAX_BLOCKSIZE. */
 #define MAX_BLOCKSIZE_POW2  (64 * (MAX_SAMPLERATE / 48000))
 
+/** Number of allowed filters. */
+#define NUM_FILTERS         2
+
 /** The maximum number of taps in either the IIR or FIR filter.
  *  I believe MLP actually specifies the maximum order for IIR filters is four,
  *  and that the sum of the orders of both filters must be <= 8. */
@@ -158,14 +161,14 @@ typedef struct MLPDecodeContext {
 #define FIR 0
 #define IIR 1
     //! Number of taps in filter
-    uint8_t     filter_order[MAX_CHANNELS][2];
+    uint8_t     filter_order[MAX_CHANNELS][NUM_FILTERS];
     //! Right shift to apply to output of filter
-    uint8_t     filter_coeff_q[MAX_CHANNELS][2];
+    uint8_t     filter_coeff_q[MAX_CHANNELS][NUM_FILTERS];
 
-    uint8_t     filter_index[MAX_CHANNELS][2];
+    uint8_t     filter_index[MAX_CHANNELS][NUM_FILTERS];
 
-    int32_t     filter_coeff[MAX_CHANNELS][2][MAX_FILTER_ORDER];
-    int32_t     filter_state[MAX_CHANNELS][2][MAX_FILTER_ORDER];
+    int32_t     filter_coeff[MAX_CHANNELS][NUM_FILTERS][MAX_FILTER_ORDER];
+    int32_t     filter_state[MAX_CHANNELS][NUM_FILTERS][MAX_FILTER_ORDER];
     //@}
 
     //@{
@@ -739,7 +742,7 @@ static int filter_sample(MLPDecodeContext *m, unsigned int substr,
 #define INDEX(channel, order, pos) \
     ((m->filter_index[channel][order] + (pos)) & (MAX_FILTER_ORDER - 1))
 
-    for (j = 0; j < 2; j++)
+    for (j = 0; j < NUM_FILTERS; j++)
         for (i = 0; i < m->filter_order[channel][j]; i++)
             accum += (int64_t)m->filter_state[channel][j][INDEX(channel,j,i)] *
                      m->filter_coeff[channel][j][i];
