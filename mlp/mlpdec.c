@@ -720,15 +720,29 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
     return 0;
 }
 
-/** Generate a PCM sample using the prediction filters and a residual value
+/** Generate PCM samples using the prediction filters and residual values
  *  read from the data stream, and update the filter state.
  */
 
-static int filter_sample(MLPDecodeContext *m, unsigned int quant_step_size,
-                         unsigned int channel, int32_t residual,
-                         unsigned int filter_coeff_q, unsigned int index)
+static void filter_channel(MLPDecodeContext *m, unsigned int substr,
+                           unsigned int channel)
 {
-    unsigned int i, j;
+    SubStream *s = &m->substream[substr];
+    unsigned int quant_step_size = s->quant_step_size[channel];
+    unsigned int filter_coeff_q = m->filter_coeff_q[channel][FIR];
+    int index = MAX_BLOCKSIZE;
+    int j, i;
+
+    for (j = 0; j < NUM_FILTERS; j++) {
+        memcpy(&m->filter_state_buffer  [j][MAX_BLOCKSIZE],
+               &m->filter_state[channel][j][0],
+               MAX_FILTER_ORDER * sizeof(int32_t));
+    }
+
+    for (i = 0; i < s->blocksize; i++) {
+        int32_t residual = m->sample_buffer[i + s->blockpos][channel];
+
+{
     int64_t accum = 0;
     int32_t result;
     unsigned int order;
@@ -748,7 +762,15 @@ static int filter_sample(MLPDecodeContext *m, unsigned int quant_step_size,
     m->filter_state_buffer[FIR][index] = result;
     m->filter_state_buffer[IIR][index] = result - accum;
 
-    return result;
+        m->sample_buffer[i + s->blockpos][channel] = result;
+}
+    }
+
+    for (j = 0; j < NUM_FILTERS; j++) {
+        memcpy(&m->filter_state[channel][j][0],
+               &m->filter_state_buffer  [j][index],
+               MAX_FILTER_ORDER * sizeof(int32_t));
+    }
 }
 
 /** Read a block of PCM residual (or actual if no filtering active) data.
@@ -790,30 +812,7 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
     }
 
     for (ch = s->min_channel; ch <= s->max_channel; ch++) {
-        unsigned int quant_step_size = s->quant_step_size[ch];
-        unsigned int filter_coeff_q = m->filter_coeff_q[ch][FIR];
-        int index = MAX_BLOCKSIZE;
-        int j;
-
-        for (j = 0; j < NUM_FILTERS; j++) {
-            memcpy(&m->filter_state_buffer[j][MAX_BLOCKSIZE],
-                   &m->filter_state[ch]   [j][0],
-                   MAX_FILTER_ORDER * sizeof(int32_t));
-        }
-
-        for (i = 0; i < s->blocksize; i++) {
-            int32_t sample = m->sample_buffer[i + s->blockpos][ch];
-
-            sample = filter_sample(m, quant_step_size, ch, sample, filter_coeff_q, index--);
-
-            m->sample_buffer[i + s->blockpos][ch] = sample;
-        }
-
-        for (j = 0; j < NUM_FILTERS; j++) {
-            memcpy(&m->filter_state[ch]   [j][0],
-                   &m->filter_state_buffer[j][index],
-                   MAX_FILTER_ORDER * sizeof(int32_t));
-        }
+        filter_channel(m, substr, ch);
     }
 
     s->blockpos += s->blocksize;
