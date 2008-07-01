@@ -281,12 +281,11 @@ static inline void calculate_sign_huff(MLPDecodeContext *m, unsigned int substr,
 }
 
 /** Read a sample, consisting of either, both or neither of entropy-coded MSBs
- *  and plain LSBs.
+ *  and plain LSBs. Returns INT32_MAX if reading of vlc failed.
  */
 
 static inline int read_huff(MLPDecodeContext *m, GetBitContext *gbp,
-                            unsigned int substr, unsigned int channel,
-                            int32_t *sample)
+                            unsigned int substr, unsigned int channel)
 {
     int codebook = m->codebook[channel];
     int quant_step_size = m->quant_step_size[substr][channel];
@@ -298,15 +297,14 @@ static inline int read_huff(MLPDecodeContext *m, GetBitContext *gbp,
                           VLC_BITS, (9 + VLC_BITS - 1) / VLC_BITS);
 
     if (result < 0)
-        return result;
+        return INT32_MAX;
 
     if (lsb_bits > 0)
         result = (result << lsb_bits) + get_bits(gbp, lsb_bits);
 
     result += m->sign_huff_offset[channel];
 
-    *sample = result << quant_step_size;
-    return 0;
+    return result << quant_step_size;
 }
 
 static int mlp_decode_init(AVCodecContext *avctx)
@@ -777,9 +775,9 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
                 m->bypassed_lsbs[i + m->blockpos[substr]][mat] = get_bits1(gbp);
 
         for (ch = m->min_channel[substr]; ch <= m->max_channel[substr]; ch++) {
-            int32_t sample;
+            int32_t sample = read_huff(m, gbp, substr, ch);
 
-            if (read_huff(m, gbp, substr, ch, &sample) < 0)
+            if (sample == INT32_MAX)
                 return -1;
 
             sample = filter_sample(m, substr, ch, sample);
