@@ -798,6 +798,14 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
             if (sample == INT32_MAX)
                 return -1;
 
+            m->sample_buffer[i + s->blockpos][ch] = sample;
+        }
+    }
+
+    for (ch = s->min_channel; ch <= s->max_channel; ch++) {
+        for (i = 0; i < s->blocksize; i++) {
+            int32_t sample = m->sample_buffer[i + s->blockpos][ch];
+
             sample = filter_sample(m, substr, ch, sample);
 
             m->sample_buffer[i + s->blockpos][ch] = sample;
