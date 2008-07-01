@@ -741,8 +741,8 @@ static void filter_channel(MLPDecodeContext *m, unsigned int substr,
                            unsigned int channel)
 {
     SubStream *s = &m->substream[substr];
-    unsigned int quant_step_size = s->quant_step_size[channel];
     unsigned int filter_coeff_q = m->filter_coeff_q[channel][FIR];
+    int32_t mask = MSB_MASK(s->quant_step_size[channel]);
     int index = MAX_BLOCKSIZE;
     int j, i;
 
@@ -766,7 +766,7 @@ static void filter_channel(MLPDecodeContext *m, unsigned int substr,
                         m->filter_coeff[channel][j][order];
 
         accum  = accum >> filter_coeff_q;
-        result = (accum + residual) & MSB_MASK(quant_step_size);
+        result = (accum + residual) & mask;
 
         --index;
 
@@ -913,7 +913,7 @@ static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
     for (mat = 0; mat < s->num_primitive_matrices; mat++) {
         int matrix_noise_shift = s->matrix_noise_shift[mat];
         unsigned int dest_ch = s->matrix_ch[mat];
-        int quant_step_size = s->quant_step_size[dest_ch];
+        int32_t mask = MSB_MASK(s->quant_step_size[dest_ch]);
 
         /* TODO: DSPContext? */
 
@@ -928,7 +928,7 @@ static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
                 index = (i * (index * 2 + 1) + index) & (m->access_unit_size_pow2 - 1);
                 accum += m->noise_buffer[index] << (matrix_noise_shift + 7);
             }
-            m->sample_buffer[i][dest_ch] = ((accum >> 14) & MSB_MASK(quant_step_size))
+            m->sample_buffer[i][dest_ch] = ((accum >> 14) & mask)
                                              + m->bypassed_lsbs[i][mat];
         }
     }
