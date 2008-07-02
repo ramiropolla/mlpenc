@@ -215,7 +215,7 @@ static AVCRC crc_1D[1024];
 
 /** Initialize static data, constant between all invocations of the codec. */
 
-static void init_static()
+static av_cold void init_static()
 {
     if (!huff_vlc[0].bits) {
         INIT_VLC_STATIC(&huff_vlc[0], VLC_BITS, 18,
