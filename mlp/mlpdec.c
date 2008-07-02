@@ -56,7 +56,7 @@
 #define NUM_FILTERS         2
 
 /** The maximum number of taps in either the IIR or FIR filter.
- *  I believe MLP actually specifies the maximum order for IIR filters is four,
+ *  I believe MLP actually specifies the maximum order for IIR filters as four,
  *  and that the sum of the orders of both filters must be <= 8. */
 #define MAX_FILTER_ORDER    8
 
@@ -70,30 +70,30 @@ static const char* sample_message =
     "a sample of this file.";
 
 typedef struct SubStream {
-    //! For each substream, whether a restart header has been read
+    //! For each substream, whether a restart header has been read.
     uint8_t     restart_seen;
 
     //@{
-    /** Restart header data */
-    //! The sync word used at the start of the last restart header
+    /** restart header data */
+    //! The sync word used at the start of the last restart header.
     uint16_t    restart_sync_word;
 
-    //! The index of the first channel coded in this substream
+    //! The index of the first channel coded in this substream.
     uint8_t     min_channel;
-    //! The index of the last channel coded in this substream
+    //! The index of the last channel coded in this substream.
     uint8_t     max_channel;
-    //! The number of channels input into the rematrix stage
+    //! The number of channels input into the rematrix stage.
     uint8_t     max_matrix_channel;
 
-    //! The left shift applied to random noise in 0x31ea substreams
+    //! The left shift applied to random noise in 0x31ea substreams.
     uint8_t     noise_shift;
-    //! The current seed value for the pseudorandom noise generator(s)
+    //! The current seed value for the pseudorandom noise generator(s).
     uint32_t    noisegen_seed;
 
     //! Does this substream contain extra info to check the size of VLC blocks?
     uint8_t     data_check_present;
 
-    //! Bitmask of which parameter sets are conveyed in a decoding parameter block
+    //! Bitmask of which parameter sets are conveyed in a decoding parameter block.
     uint8_t     param_presence_flags;
 #define PARAM_BLOCKSIZE     (1 << 7)
 #define PARAM_MATRIX        (1 << 6)
@@ -105,34 +105,34 @@ typedef struct SubStream {
     //@}
 
     //@{
-    /** Matrix data */
+    /** matrix data */
 
-    //! Number of matrices to be applied
+    //! Number of matrices to be applied.
     uint8_t     num_primitive_matrices;
 
-    //! Output channel of matrix
+    //! Matrix output channel.
     uint8_t     matrix_ch[MAX_MATRICES];
 
-    //! Whether the LSBs of the matrix output are encoded in the bitstream
+    //! Whether the LSBs of the matrix output are encoded in the bitstream.
     uint8_t     lsb_bypass[MAX_MATRICES];
-    //! Matrix coefficients, stored as 2.14 fixed point
+    //! Matrix coefficients, stored as 2.14 fixed point.
     int32_t     matrix_coeff[MAX_MATRICES][MAX_CHANNELS+2];
-    //! Left shift to apply to noise values in 0x31eb substreams
+    //! Left shift to apply to noise values in 0x31eb substreams.
     uint8_t     matrix_noise_shift[MAX_MATRICES];
     //@}
 
-    //! Left shift to apply to huffman-decoded residuals
+    //! Left shift to apply to huffman-decoded residuals.
     uint8_t     quant_step_size[MAX_CHANNELS];
 
-    //! Number of PCM samples in current audio block
+    //! Number of PCM samples in current audio block.
     uint16_t    blocksize;
-    //! Number of PCM samples decoded so far in this frame
+    //! Number of PCM samples decoded so far in this frame.
     uint16_t    blockpos;
 
-    //! Left shift to apply to decoded PCM values to get final 24-bit output
+    //! Left shift to apply to decoded PCM values to get final 24-bit output.
     int8_t      output_shift[MAX_CHANNELS];
 
-    //! Running XOR of all output samples
+    //! Running XOR of all output samples.
     int32_t     lossless_check_data;
 
 } SubStream;
@@ -143,26 +143,26 @@ typedef struct MLPDecodeContext {
     //! Do we have valid stream data read from a major sync block?
     uint8_t     params_valid;
 
-    //! Number of substreams contained within this stream
+    //! Number of substreams contained within this stream.
     uint8_t     num_substreams;
 
-    //! Index of the last substream to decode - further substreams are skipped
+    //! Index of the last substream to decode - further substreams are skipped.
     uint8_t     max_decoded_substream;
 
-    //! Number of PCM samples contained in each frame
+    //! Number of PCM samples contained in each frame.
     int         access_unit_size;
-    //! Next power of two above the number of samples in each frame
+    //! Next power of two above the number of samples in each frame.
     int         access_unit_size_pow2;
 
     SubStream   substream[MAX_SUBSTREAMS];
 
     //@{
-    /** Filter data. */
+    /** filter data */
 #define FIR 0
 #define IIR 1
-    //! Number of taps in filter
+    //! Number of taps in filter.
     uint8_t     filter_order[MAX_CHANNELS][NUM_FILTERS];
-    //! Right shift to apply to output of filter
+    //! Right shift to apply to output of filter.
     uint8_t     filter_coeff_q[MAX_CHANNELS][NUM_FILTERS];
 
     int32_t     filter_coeff[MAX_CHANNELS][NUM_FILTERS][MAX_FILTER_ORDER];
@@ -171,14 +171,14 @@ typedef struct MLPDecodeContext {
     //@}
 
     //@{
-    /** Sample data coding infomation */
-    //! Offset to apply to residual values
+    /** sample data coding infomation */
+    //! Offset to apply to residual values.
     int16_t     huff_offset[MAX_CHANNELS];
-    //! Sign/rounding corrected version of huff_offset
+    //! Sign/rounding corrected version of huff_offset.
     int32_t     sign_huff_offset[MAX_CHANNELS];
-    //! Which VLC codebook to use to read residuals
+    //! Which VLC codebook to use to read residuals.
     uint8_t     codebook[MAX_CHANNELS];
-    //! Size of residual suffix not encoded using VLC
+    //! Size of residual suffix not encoded using VLC.
     uint8_t     huff_lsbs[MAX_CHANNELS];
     //@}
 
@@ -188,10 +188,9 @@ typedef struct MLPDecodeContext {
 } MLPDecodeContext;
 
 /** Tables defining the huffman codes.
- *  There are three entropy coding methods used in MLP (four if you count "none"
- *  as a method). These use the same sequences for codes starting 00... or 01...
- *  but have different codes starting 1....
- */
+ *  There are three entropy coding methods used in MLP (four if you count
+ *  "none" as a method). These use the same sequences for codes starting with
+ *  00 or 01, but have different codes starting 1. */
 
 static const uint8_t huffman_tables[3][18][2] = {
     { /* Huffman table 0, -7 - +10 */
@@ -238,9 +237,8 @@ static void init_static()
 
 /** MLP uses checksums that seem to be based on the standard CRC algorithm,
  *  but not (in implementation terms, the table lookup and XOR are reversed).
- *  We can implement this behaviour using a standard av_crc on all but the
- *  last element, then XOR that with the last element.
- */
+ *  We can implement this behavior using a standard av_crc on all but the
+ *  last element, then XOR that with the last element. */
 
 static uint8_t mlp_checksum8(const uint8_t *buf, unsigned int buf_size)
 {
@@ -250,8 +248,7 @@ static uint8_t mlp_checksum8(const uint8_t *buf, unsigned int buf_size)
 }
 
 /** Calculate an 8-bit checksum over a restart header -- a non-multiple-of-8
- *  number of bits, starting two bits into the first byte of buf.
- */
+ *  number of bits, starting two bits into the first byte of buf. */
 
 static uint8_t mlp_restart_checksum(const uint8_t *buf, unsigned int bit_size)
 {
@@ -289,8 +286,7 @@ static inline void calculate_sign_huff(MLPDecodeContext *m, unsigned int substr,
 }
 
 /** Read a sample, consisting of either, both or neither of entropy-coded MSBs
- *  and plain LSBs.
- */
+ *  and plain LSBs. */
 
 static inline int read_huff_channels(MLPDecodeContext *m, GetBitContext *gbp,
                                      unsigned int substr, unsigned int pos)
@@ -425,8 +421,7 @@ static int read_major_sync(MLPDecodeContext *m, GetBitContext *gb)
 
 /** Read a restart header from a block in a substream. This contains parameters
  *  required to decode the audio that do not change very often. Generally
- *  (always) present only in blocks following a major sync.
- */
+ *  (always) present only in blocks following a major sync. */
 
 static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
                                const uint8_t *buf, unsigned int substr)
@@ -542,8 +537,7 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
     return 0;
 }
 
-/** Read parameters for one of the prediction filters.
- */
+/** Read parameters for one of the prediction filters. */
 
 static int read_filter_params(MLPDecodeContext *m, GetBitContext *gbp,
                               unsigned int channel, unsigned int filter)
@@ -611,8 +605,7 @@ static int read_filter_params(MLPDecodeContext *m, GetBitContext *gbp,
 }
 
 /** Read decoding parameters that change more often than those in the restart
- *  header.
- */
+ *  header. */
 
 static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                                 unsigned int substr)
@@ -736,8 +729,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
 #define MSB_MASK(bits)  (-1u << bits)
 
 /** Generate PCM samples using the prediction filters and residual values
- *  read from the data stream, and update the filter state.
- */
+ *  read from the data stream, and update the filter state. */
 
 static void filter_channel(MLPDecodeContext *m, unsigned int substr,
                            unsigned int channel)
@@ -785,8 +777,7 @@ static void filter_channel(MLPDecodeContext *m, unsigned int substr,
     }
 }
 
-/** Read a block of PCM residual (or actual if no filtering active) data.
- */
+/** Read a block of PCM residual data (or actual if no filtering active). */
 
 static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
                            unsigned int substr)
@@ -854,10 +845,10 @@ static const int8_t noise_table[256] = {
  *  sequence generators, used to generate noise data which is used when the
  *  channels are rematrixed. I'm not sure if they provide a practical benefit
  *  to compression, or just obfuscate the decoder. Are they for some kind of
- *  dithering?
- */
+ *  dithering? */
 
-/** Generate two channels of noise, used in the matrix when restart_sync_word == 0x31ea. */
+/** Generate two channels of noise, used in the matrix when
+ *  restart_sync_word == 0x31ea. */
 
 static void generate_noise_1(MLPDecodeContext *m, unsigned int substr)
 {
@@ -895,8 +886,8 @@ static void generate_noise_2(MLPDecodeContext *m, unsigned int substr)
 }
 
 
-/** Apply the channel matrices in turn to reconstruct the original audio samples.
- */
+/** Apply the channel matrices in turn to reconstruct the original audio
+ *  samples. */
 
 static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
 {
@@ -936,8 +927,7 @@ static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
     }
 }
 
-/** Write the audio data into the output buffer.
- */
+/** Write the audio data into the output buffer. */
 
 static int output_data_internal(MLPDecodeContext *m, unsigned int substr,
                                 uint8_t *data, unsigned int *data_size, int is32)
@@ -975,8 +965,7 @@ static int output_data(MLPDecodeContext *m, unsigned int substr,
 
 
 /** XOR together all the bytes of a buffer.
- *  Does this belong in dspcontext?
- */
+ *  Does this belong in dspcontext? */
 
 static uint8_t calculate_parity(const uint8_t *buf, unsigned int buf_size)
 {
@@ -995,11 +984,9 @@ static uint8_t calculate_parity(const uint8_t *buf, unsigned int buf_size)
     return scratch;
 }
 
-/**
- * Read an access unit from the stream.
- * Returns -1 on error, 0 if not enough data is present in the input stream
- * otherwise returns the number of bytes consumed.
- */
+/** Read an access unit from the stream.
+ *  Returns -1 on error, 0 if not enough data is present in the input stream
+ *  otherwise returns the number of bytes consumed. */
 
 static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
                             const uint8_t *buf, int buf_size)
@@ -1059,15 +1046,15 @@ static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
 
         if (end + header_size + substr_header_size > length) {
             av_log(m->avctx, AV_LOG_ERROR,
-                   "Substream %d data indicated length goes off end of packet.\n",
-                   substr);
+                   "Indicated length of substream %d data goes off end of "
+                   "packet.\n", substr);
             end = length - header_size - substr_header_size;
         }
 
         if (end < substream_start) {
             av_log(avctx, AV_LOG_ERROR,
-                   "Substream %d data indicated end offset "
-                   "is before calculated start offset.\n",
+                   "Indicated end offset of substream %d data "
+                   "is smaller than calculated start offset.\n",
                    substr);
             goto error;
         }
