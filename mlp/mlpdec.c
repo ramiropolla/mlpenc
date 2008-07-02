@@ -111,7 +111,7 @@ typedef struct SubStream {
     uint8_t     num_primitive_matrices;
 
     //! matrix output channel
-    uint8_t     matrix_ch[MAX_MATRICES];
+    uint8_t     matrix_out_ch[MAX_MATRICES];
 
     //! Whether the LSBs of the matrix output are encoded in the bitstream.
     uint8_t     lsb_bypass[MAX_MATRICES];
@@ -631,14 +631,14 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
 
             for (mat = 0; mat < s->num_primitive_matrices; mat++) {
                 int frac_bits, max_chan;
-                s->matrix_ch[mat] = get_bits(gbp, 4);
+                s->matrix_out_ch[mat] = get_bits(gbp, 4);
                 frac_bits = get_bits(gbp, 4);
                 s->lsb_bypass[mat] = get_bits1(gbp);
 
-                if (s->matrix_ch[mat] > s->max_channel) {
+                if (s->matrix_out_ch[mat] > s->max_channel) {
                     av_log(m->avctx, AV_LOG_ERROR,
                            "Invalid channel %d specified as output from matrix\n",
-                           s->matrix_ch[mat]);
+                           s->matrix_out_ch[mat]);
                     return -1;
                 }
                 if (frac_bits > 14) {
@@ -905,7 +905,7 @@ static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
 
     for (mat = 0; mat < s->num_primitive_matrices; mat++) {
         int matrix_noise_shift = s->matrix_noise_shift[mat];
-        unsigned int dest_ch = s->matrix_ch[mat];
+        unsigned int dest_ch = s->matrix_out_ch[mat];
         int32_t mask = MSB_MASK(s->quant_step_size[dest_ch]);
 
         /* TODO: DSPContext? */
