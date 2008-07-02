@@ -110,7 +110,7 @@ typedef struct SubStream {
     //! Number of matrices to be applied.
     uint8_t     num_primitive_matrices;
 
-    //! Matrix output channel.
+    //! matrix output channel
     uint8_t     matrix_ch[MAX_MATRICES];
 
     //! Whether the LSBs of the matrix output are encoded in the bitstream.
@@ -192,15 +192,15 @@ typedef struct MLPDecodeContext {
  *  00 or 01, but have different codes starting 1. */
 
 static const uint8_t huffman_tables[3][18][2] = {
-    { /* Huffman table 0, -7 - +10 */
+    {    /* huffman table 0, -7 - +10 */
         {0x01, 9}, {0x01, 8}, {0x01, 7}, {0x01, 6}, {0x01, 5}, {0x01, 4}, {0x01, 3},
         {0x04, 3}, {0x05, 3}, {0x06, 3}, {0x07, 3},
         {0x03, 3}, {0x05, 4}, {0x09, 5}, {0x11, 6}, {0x21, 7}, {0x41, 8}, {0x81, 9},
-    }, { /* Huffman table 1, -7 - +8 */
+    }, { /* huffman table 1, -7 - +8 */
         {0x01, 9}, {0x01, 8}, {0x01, 7}, {0x01, 6}, {0x01, 5}, {0x01, 4}, {0x01, 3},
         {0x02, 2}, {0x03, 2},
         {0x03, 3}, {0x05, 4}, {0x09, 5}, {0x11, 6}, {0x21, 7}, {0x41, 8}, {0x81, 9},
-    }, { /* Huffman table 2, -7 - +7 */
+    }, { /* huffman table 2, -7 - +7 */
         {0x01, 9}, {0x01, 8}, {0x01, 7}, {0x01, 6}, {0x01, 5}, {0x01, 4}, {0x01, 3},
         {0x01, 1},
         {0x03, 3}, {0x05, 4}, {0x09, 5}, {0x11, 6}, {0x21, 7}, {0x41, 8}, {0x81, 9},
