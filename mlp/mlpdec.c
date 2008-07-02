@@ -167,7 +167,6 @@ typedef struct MLPDecodeContext {
 
     int32_t     filter_coeff[MAX_CHANNELS][NUM_FILTERS][MAX_FILTER_ORDER];
     int32_t     filter_state[MAX_CHANNELS][NUM_FILTERS][MAX_FILTER_ORDER];
-    int32_t     filter_state_buffer       [NUM_FILTERS][MAX_BLOCKSIZE + MAX_FILTER_ORDER];
     //@}
 
     //@{
@@ -735,13 +734,14 @@ static void filter_channel(MLPDecodeContext *m, unsigned int substr,
                            unsigned int channel)
 {
     SubStream *s = &m->substream[substr];
+    int32_t filter_state_buffer[NUM_FILTERS][MAX_BLOCKSIZE + MAX_FILTER_ORDER];
     unsigned int filter_coeff_q = m->filter_coeff_q[channel][FIR];
     int32_t mask = MSB_MASK(s->quant_step_size[channel]);
     int index = MAX_BLOCKSIZE;
     int j, i;
 
     for (j = 0; j < NUM_FILTERS; j++) {
-        memcpy(&m->filter_state_buffer  [j][MAX_BLOCKSIZE],
+        memcpy(&   filter_state_buffer  [j][MAX_BLOCKSIZE],
                &m->filter_state[channel][j][0],
                MAX_FILTER_ORDER * sizeof(int32_t));
     }
@@ -756,7 +756,7 @@ static void filter_channel(MLPDecodeContext *m, unsigned int substr,
 
         for (j = 0; j < NUM_FILTERS; j++)
             for (order = 0; order < m->filter_order[channel][j]; order++)
-                accum += (int64_t)m->filter_state_buffer[j][index + order] *
+                accum += (int64_t)filter_state_buffer[j][index + order] *
                         m->filter_coeff[channel][j][order];
 
         accum  = accum >> filter_coeff_q;
@@ -764,15 +764,15 @@ static void filter_channel(MLPDecodeContext *m, unsigned int substr,
 
         --index;
 
-        m->filter_state_buffer[FIR][index] = result;
-        m->filter_state_buffer[IIR][index] = result - accum;
+        filter_state_buffer[FIR][index] = result;
+        filter_state_buffer[IIR][index] = result - accum;
 
         m->sample_buffer[i + s->blockpos][channel] = result;
     }
 
     for (j = 0; j < NUM_FILTERS; j++) {
         memcpy(&m->filter_state[channel][j][0],
-               &m->filter_state_buffer  [j][index],
+               &   filter_state_buffer  [j][index],
                MAX_FILTER_ORDER * sizeof(int32_t));
     }
 }
