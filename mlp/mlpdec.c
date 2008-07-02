@@ -710,9 +710,11 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                        "FIR and IIR filters must use same precision\n");
                 return -1;
             }
-            /* Both filters must have the same precision, so the filtering
-             * code always use the FIR precision. If only IIR is used, we copy
-             * its precision to FIR. */
+            /* The FIR and IIR filters must have the same precision.
+             * To simplify the filtering code, only the precision of the
+             * FIR filter is considered. If only the IIR filter is employed,
+             * the FIR filter precision is set to that of the IIR filter, so
+             * that the filtering code can use it. */
             if (!m->filter_order[ch][FIR] && m->filter_order[ch][IIR])
                 m->filter_coeff_q[ch][FIR] = m->filter_coeff_q[ch][IIR];
 
