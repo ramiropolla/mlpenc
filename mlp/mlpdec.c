@@ -632,8 +632,8 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
             for (mat = 0; mat < s->num_primitive_matrices; mat++) {
                 int frac_bits, max_chan;
                 s->matrix_out_ch[mat] = get_bits(gbp, 4);
-                frac_bits = get_bits(gbp, 4);
-                s->lsb_bypass[mat] = get_bits1(gbp);
+                frac_bits             = get_bits(gbp, 4);
+                s->lsb_bypass   [mat] = get_bits1(gbp);
 
                 if (s->matrix_out_ch[mat] > s->max_channel) {
                     av_log(m->avctx, AV_LOG_ERROR,
