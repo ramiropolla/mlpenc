@@ -786,7 +786,8 @@ static int read_block_data(MLPDecodeContext *m, GetBitContext *gbp,
     unsigned int i, ch, expected_stream_pos = 0;
 
     if (s->data_check_present) {
-        expected_stream_pos = get_bits_count(gbp) + get_bits(gbp, 16);
+        expected_stream_pos  = get_bits_count(gbp);
+        expected_stream_pos += get_bits(gbp, 16);
         av_log(m->avctx, AV_LOG_WARNING, "This file contains some features "
                "we have not tested yet. %s\n", sample_message);
     }
