@@ -983,7 +983,7 @@ static uint8_t calculate_parity(const uint8_t *buf, unsigned int buf_size)
 }
 
 /** Read an access unit from the stream.
- *  Returns -1 on error, 0 if not enough data is present in the input stream
+ *  Returns < 0 on error, 0 if not enough data is present in the input stream
  *  otherwise returns the number of bytes consumed. */
 
 static int read_access_unit(AVCodecContext *avctx, void* data, int *data_size,
