@@ -848,7 +848,7 @@ static const int8_t noise_table[256] = {
 /** Generate two channels of noise, used in the matrix when
  *  restart_sync_word == 0x31ea. */
 
-static void generate_noise_1(MLPDecodeContext *m, unsigned int substr)
+static void generate_2_noise_channels(MLPDecodeContext *m, unsigned int substr)
 {
     SubStream *s = &m->substream[substr];
     unsigned int i;
@@ -868,7 +868,7 @@ static void generate_noise_1(MLPDecodeContext *m, unsigned int substr)
 
 /** Generate a block of noise, used when restart_sync_word == 0x31eb. */
 
-static void generate_noise_2(MLPDecodeContext *m, unsigned int substr)
+static void fill_noise_buffer(MLPDecodeContext *m, unsigned int substr)
 {
     SubStream *s = &m->substream[substr];
     unsigned int i;
@@ -895,10 +895,10 @@ static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
 
     maxchan = s->max_matrix_channel;
     if (s->restart_sync_word == 0x31ea) {
-        generate_noise_1(m, substr);
+        generate_2_noise_channels(m, substr);
         maxchan += 2;
     } else {
-        generate_noise_2(m, substr);
+        fill_noise_buffer(m, substr);
     }
 
     for (mat = 0; mat < s->num_primitive_matrices; mat++) {
