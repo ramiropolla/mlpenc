@@ -75,8 +75,8 @@ typedef struct SubStream {
 
     //@{
     /** restart header data */
-    //! The sync word used at the start of the last restart header.
-    uint16_t    restart_sync_word;
+    //! The type of noise to be used in the rematrix stage.
+    uint16_t    noise_type;
 
     //! The index of the first channel coded in this substream.
     uint8_t     min_channel;
@@ -439,7 +439,7 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
                "Restart header sync incorrect (got 0x%04x)\n", sync_word);
         return -1;
     }
-    s->restart_sync_word = get_bits1(gbp);
+    s->noise_type = get_bits1(gbp);
 
     skip_bits(gbp, 16); /* Output timestamp */
 
@@ -645,7 +645,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                 }
 
                 max_chan = s->max_matrix_channel;
-                if (!s->restart_sync_word)
+                if (!s->noise_type)
                     max_chan+=2;
 
                 for (ch = 0; ch <= max_chan; ch++) {
@@ -656,7 +656,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                     s->matrix_coeff[mat][ch] = coeff_val << (14 - frac_bits);
                 }
 
-                if (s->restart_sync_word)
+                if (s->noise_type)
                     s->matrix_noise_shift[mat] = get_bits(gbp, 4);
                 else
                     s->matrix_noise_shift[mat] = 0;
@@ -894,7 +894,7 @@ static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
     unsigned int maxchan;
 
     maxchan = s->max_matrix_channel;
-    if (!s->restart_sync_word) {
+    if (!s->noise_type) {
         generate_2_noise_channels(m, substr);
         maxchan += 2;
     } else {
