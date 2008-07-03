@@ -44,7 +44,7 @@
  *  higher, but again I haven't seen any examples with more than two. */
 #define MAX_SUBSTREAMS      2
 
-/** Maximum sample frequency supported. */
+/** Maximum sample frequency seen in files. */
 #define MAX_SAMPLERATE      192000
 
 /** The maximum number of audio samples within one access unit. */
@@ -70,7 +70,7 @@ static const char* sample_message =
     "a sample of this file.";
 
 typedef struct SubStream {
-    //! Set if a valid restart header has been read. Otherwise substream can not be decoded.
+    //! Set if a valid restart header has been read. Otherwise the substream can not be decoded.
     uint8_t     restart_seen;
 
     //@{
@@ -90,7 +90,7 @@ typedef struct SubStream {
     //! The current seed value for the pseudorandom noise generator(s).
     uint32_t    noisegen_seed;
 
-    //! Set if substream contains extra info to check the size of VLC blocks.
+    //! Set if the substream contains extra info to check the size of VLC blocks.
     uint8_t     data_check_present;
 
     //! Bitmask of which parameter sets are conveyed in a decoding parameter block.
