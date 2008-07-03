@@ -322,7 +322,7 @@ static inline int read_huff_channels(MLPDecodeContext *m, GetBitContext *gbp,
     return 0;
 }
 
-static int mlp_decode_init(AVCodecContext *avctx)
+static av_cold int mlp_decode_init(AVCodecContext *avctx)
 {
     MLPDecodeContext *m = avctx->priv_data;
     int substr;
