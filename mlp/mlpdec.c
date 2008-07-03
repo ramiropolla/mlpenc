@@ -519,9 +519,6 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
         m->filter_coeff_q[ch][FIR] = 0;
         m->filter_coeff_q[ch][IIR] = 0;
 
-        memset(m->filter_coeff[ch], 0, sizeof(m->filter_coeff[ch]));
-        memset(m->filter_state[ch], 0, sizeof(m->filter_state[ch]));
-
         /* Default audio coding is 24-bit raw PCM */
         m->huff_offset     [ch] = 0;
         m->sign_huff_offset[ch] = (-1) << 23;
