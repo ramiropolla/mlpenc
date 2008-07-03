@@ -432,14 +432,14 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
     uint8_t lossless_check;
     int start_count = get_bits_count(gbp);
 
-    sync_word = get_bits(gbp, 14);
+    sync_word = get_bits(gbp, 13);
 
-    if ((sync_word & 0x3ffe) != 0x31ea) {
+    if (sync_word != 0x31ea >> 1) {
         av_log(m->avctx, AV_LOG_ERROR,
                "Restart header sync incorrect (got 0x%04x)\n", sync_word);
         return -1;
     }
-    s->restart_sync_word = sync_word;
+    s->restart_sync_word = get_bits1(gbp);
 
     skip_bits(gbp, 16); /* Output timestamp */
 
@@ -645,7 +645,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                 }
 
                 max_chan = s->max_matrix_channel;
-                if (s->restart_sync_word == 0x31ea)
+                if (!s->restart_sync_word)
                     max_chan+=2;
 
                 for (ch = 0; ch <= max_chan; ch++) {
@@ -656,7 +656,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                     s->matrix_coeff[mat][ch] = coeff_val << (14 - frac_bits);
                 }
 
-                if (s->restart_sync_word == 0x31eb)
+                if (s->restart_sync_word)
                     s->matrix_noise_shift[mat] = get_bits(gbp, 4);
                 else
                     s->matrix_noise_shift[mat] = 0;
@@ -846,7 +846,7 @@ static const int8_t noise_table[256] = {
  *  dithering? */
 
 /** Generate two channels of noise, used in the matrix when
- *  restart_sync_word == 0x31ea. */
+ *  restart sync word == 0x31ea. */
 
 static void generate_2_noise_channels(MLPDecodeContext *m, unsigned int substr)
 {
@@ -866,7 +866,7 @@ static void generate_2_noise_channels(MLPDecodeContext *m, unsigned int substr)
     s->noisegen_seed = seed;
 }
 
-/** Generate a block of noise, used when restart_sync_word == 0x31eb. */
+/** Generate a block of noise, used when restart sync word == 0x31eb. */
 
 static void fill_noise_buffer(MLPDecodeContext *m, unsigned int substr)
 {
@@ -894,7 +894,7 @@ static void rematrix_channels(MLPDecodeContext *m, unsigned int substr)
     unsigned int maxchan;
 
     maxchan = s->max_matrix_channel;
-    if (s->restart_sync_word == 0x31ea) {
+    if (!s->restart_sync_word) {
         generate_2_noise_channels(m, substr);
         maxchan += 2;
     } else {
