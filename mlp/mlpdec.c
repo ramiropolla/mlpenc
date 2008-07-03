@@ -1151,9 +1151,9 @@ next_substr:
         buf += substream_data_len[substr];
     }
 
-    rematrix_channels(m, substr - 1);
+    rematrix_channels(m, m->max_decoded_substream);
 
-    if (output_data(m, substr - 1, data, data_size) < 0)
+    if (output_data(m, m->max_decoded_substream, data, data_size) < 0)
         return -1;
 
     return length;
