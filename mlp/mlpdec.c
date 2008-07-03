@@ -70,7 +70,7 @@ static const char* sample_message =
     "a sample of this file.";
 
 typedef struct SubStream {
-    //! For each substream, whether a restart header has been read.
+    //! Set if a valid restart header has been read. Otherwise substream can not be decoded.
     uint8_t     restart_seen;
 
     //@{
@@ -90,7 +90,7 @@ typedef struct SubStream {
     //! The current seed value for the pseudorandom noise generator(s).
     uint32_t    noisegen_seed;
 
-    //! Does this substream contain extra info to check the size of VLC blocks?
+    //! Set if substream contains extra info to check the size of VLC blocks.
     uint8_t     data_check_present;
 
     //! Bitmask of which parameter sets are conveyed in a decoding parameter block.
@@ -140,7 +140,7 @@ typedef struct SubStream {
 typedef struct MLPDecodeContext {
     AVCodecContext *avctx;
 
-    //! Do we have valid stream data read from a major sync block?
+    //! Set if a valid major sync block has been read. Otherwise no decoding is possible.
     uint8_t     params_valid;
 
     //! Number of substreams contained within this stream.
