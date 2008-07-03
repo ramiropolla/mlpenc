@@ -189,7 +189,7 @@ typedef struct MLPDecodeContext {
 /** Tables defining the huffman codes.
  *  There are three entropy coding methods used in MLP (four if you count
  *  "none" as a method). These use the same sequences for codes starting with
- *  00 or 01, but have different codes starting 1. */
+ *  00 or 01, but have different codes starting with 1. */
 
 static const uint8_t huffman_tables[3][18][2] = {
     {    /* huffman table 0, -7 - +10 */
