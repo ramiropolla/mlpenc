@@ -218,15 +218,15 @@ static AVCRC crc_1D[1024];
 
 static av_cold void init_static()
 {
-        INIT_VLC_STATIC(&huff_vlc[0], VLC_BITS, 18,
-                 &huffman_tables[0][0][1], 2, 1,
-                 &huffman_tables[0][0][0], 2, 1, 512);
-        INIT_VLC_STATIC(&huff_vlc[1], VLC_BITS, 16,
-                 &huffman_tables[1][0][1], 2, 1,
-                 &huffman_tables[1][0][0], 2, 1, 512);
-        INIT_VLC_STATIC(&huff_vlc[2], VLC_BITS, 15,
-                 &huffman_tables[2][0][1], 2, 1,
-                 &huffman_tables[2][0][0], 2, 1, 512);
+    INIT_VLC_STATIC(&huff_vlc[0], VLC_BITS, 18,
+                &huffman_tables[0][0][1], 2, 1,
+                &huffman_tables[0][0][0], 2, 1, 512);
+    INIT_VLC_STATIC(&huff_vlc[1], VLC_BITS, 16,
+                &huffman_tables[1][0][1], 2, 1,
+                &huffman_tables[1][0][0], 2, 1, 512);
+    INIT_VLC_STATIC(&huff_vlc[2], VLC_BITS, 15,
+                &huffman_tables[2][0][1], 2, 1,
+                &huffman_tables[2][0][0], 2, 1, 512);
 
     if (!crc_init) {
         av_crc_init(crc_63, 0,  8,   0x63, sizeof(crc_63));
