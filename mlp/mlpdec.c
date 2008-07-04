@@ -268,8 +268,8 @@ static uint8_t mlp_restart_checksum(const uint8_t *buf, unsigned int bit_size)
     return crc;
 }
 
-static inline int32_t calculate_sign_huff(MLPDecodeContext *m, unsigned int substr,
-                                       unsigned int ch)
+static inline int32_t calculate_sign_huff(MLPDecodeContext *m,
+                                          unsigned int substr, unsigned int ch)
 {
     SubStream *s = &m->substream[substr];
     int lsb_bits = m->huff_lsbs[ch] - s->quant_step_size[ch];
