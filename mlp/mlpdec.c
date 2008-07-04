@@ -514,8 +514,8 @@ static int read_restart_header(MLPDecodeContext *m, GetBitContext *gbp,
     memset(s->quant_step_size, 0, sizeof(s->quant_step_size));
 
     for (ch = s->min_channel; ch <= s->max_channel; ch++) {
-        m->filter_order  [ch][FIR] = 0;
-        m->filter_order  [ch][IIR] = 0;
+        m->filter_order[ch][FIR] = 0;
+        m->filter_order[ch][IIR] = 0;
         m->filter_shift[ch][FIR] = 0;
         m->filter_shift[ch][IIR] = 0;
 
@@ -693,7 +693,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                     if (read_filter_params(m, gbp, ch, IIR) < 0)
                         return -1;
 
-            if (m->filter_order  [ch][FIR] && m->filter_order  [ch][IIR] &&
+            if (m->filter_order[ch][FIR] && m->filter_order[ch][IIR] &&
                 m->filter_shift[ch][FIR] != m->filter_shift[ch][IIR]) {
                 av_log(m->avctx, AV_LOG_ERROR,
                        "FIR and IIR filters must use same precision\n");
