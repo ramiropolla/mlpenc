@@ -209,6 +209,7 @@ static const uint8_t huffman_tables[3][18][2] = {
 
 static VLC huff_vlc[3];
 
+static int crc_init = 0;
 static AVCRC crc_63[1024];
 static AVCRC crc_1D[1024];
 
@@ -217,7 +218,6 @@ static AVCRC crc_1D[1024];
 
 static av_cold void init_static()
 {
-    if (!huff_vlc[0].bits) {
         INIT_VLC_STATIC(&huff_vlc[0], VLC_BITS, 18,
                  &huffman_tables[0][0][1], 2, 1,
                  &huffman_tables[0][0][0], 2, 1, 512);
@@ -228,8 +228,10 @@ static av_cold void init_static()
                  &huffman_tables[2][0][1], 2, 1,
                  &huffman_tables[2][0][0], 2, 1, 512);
 
+    if (!crc_init) {
         av_crc_init(crc_63, 0,  8,   0x63, sizeof(crc_63));
         av_crc_init(crc_1D, 0,  8,   0x1D, sizeof(crc_1D));
+        crc_init = 1;
     }
 }
 
