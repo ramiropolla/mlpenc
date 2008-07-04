@@ -268,20 +268,21 @@ static uint8_t mlp_restart_checksum(const uint8_t *buf, unsigned int bit_size)
     return crc;
 }
 
-static inline void calculate_sign_huff(MLPDecodeContext *m, unsigned int substr,
+static inline int32_t calculate_sign_huff(MLPDecodeContext *m, unsigned int substr,
                                        unsigned int ch)
 {
     SubStream *s = &m->substream[substr];
     int lsb_bits = m->huff_lsbs[ch] - s->quant_step_size[ch];
     int sign_shift = lsb_bits + (m->codebook[ch] ? 2 - m->codebook[ch] : -1);
-
-    m->sign_huff_offset[ch] = m->huff_offset[ch];
+    int32_t sign_huff_offset = m->huff_offset[ch];
 
     if (m->codebook[ch] > 0)
-        m->sign_huff_offset[ch] -= 7 << lsb_bits;
+        sign_huff_offset -= 7 << lsb_bits;
 
     if (sign_shift >= 0)
-        m->sign_huff_offset[ch] -= 1 << sign_shift;
+        sign_huff_offset -= 1 << sign_shift;
+
+    return sign_huff_offset;
 }
 
 /** Read a sample, consisting of either, both or neither of entropy-coded MSBs
@@ -678,7 +679,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
                 s->quant_step_size[ch] = get_bits(gbp, 4);
                 /* TODO: validate */
 
-                calculate_sign_huff(m, substr, ch);
+                m->sign_huff_offset[ch] = calculate_sign_huff(m, substr, ch);
             }
 
     for (ch = s->min_channel; ch <= s->max_channel; ch++)
@@ -714,7 +715,7 @@ static int read_decoding_params(MLPDecodeContext *m, GetBitContext *gbp,
             m->codebook [ch] = get_bits(gbp, 2);
             m->huff_lsbs[ch] = get_bits(gbp, 5);
 
-            calculate_sign_huff(m, substr, ch);
+            m->sign_huff_offset[ch] = calculate_sign_huff(m, substr, ch);
 
             /* TODO: validate */
         }
