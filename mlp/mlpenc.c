@@ -400,7 +400,7 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
         if (params_changed       & PARAM_OUTSHIFT) {
             put_bits(pb, 1, 1);
             for (ch = 0; ch <= rh->max_matrix_channel; ch++)
-                put_bits(pb, 4, dp->output_shift[ch] & 0xF);
+                put_sbits(pb, 4, dp->output_shift[ch]);
         } else {
             put_bits(pb, 1, 0);
         }
@@ -441,7 +441,7 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
             if (dp->param_presence_flags & PARAM_HUFFOFFSET) {
                 if (params_changed       & PARAM_HUFFOFFSET) {
                     put_bits(pb,  1, 1);
-                    put_bits(pb, 15, dp->huff_offset[ch] & 0x7FFF);
+                    put_sbits(pb, 15, dp->huff_offset[ch]);
                 } else {
                     put_bits(pb, 1, 0);
                 }
