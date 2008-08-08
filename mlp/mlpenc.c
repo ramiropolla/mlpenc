@@ -555,9 +555,9 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
                                  int *plsb_bits, int *pcount)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
-    int codebook_offset  = codebook_offsets[codebook];
     int32_t codebook_min = codebook_extremes[codebook][0];
     int32_t codebook_max = codebook_extremes[codebook][1];
+    int codebook_offset  = codebook_offsets [codebook];
     int lsb_bits = 0, bitcount = 0;
     int i;
 
@@ -591,11 +591,11 @@ static int codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                          int16_t min, int16_t max,
                          int16_t *poffset, int *plsb_bits)
 {
+    int offset_min, offset_max;
     int best_count = INT_MAX;
     int16_t best_offset = 0;
     int best_lsb_bits = 0;
     int offset;
-    int offset_min, offset_max;
 
     offset_min = FFMAX(min, HUFF_OFFSET_MIN);
     offset_max = FFMIN(max, HUFF_OFFSET_MAX);
@@ -635,7 +635,8 @@ static void determine_bits(MLPEncodeContext *ctx)
             int best_codebook = 0;
             int16_t offset[3];
             int bitcount[3];
-            int lsb_bits[3], i;
+            int lsb_bits[3];
+            int i;
 
             /* Determine extremes. */
             for (i = 0; i < dp->blocksize; i++) {
@@ -683,14 +684,14 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
     unsigned int i, ch;
 
     for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
-        lsb_bits[ch] = dp->huff_lsbs[ch] - dp->quant_step_size[ch];
+        lsb_bits       [ch] = dp->huff_lsbs  [ch] - dp->quant_step_size[ch];
         codebook       [ch] = dp->codebook   [ch] - 1;
-        offset  [ch] = dp->huff_offset[ch];
+        offset         [ch] = dp->huff_offset[ch];
         codebook_offset[ch] = codebook_offsets[codebook[ch]];
 
         /* Unsign if needed. */
         if (codebook[ch] == -1 || codebook[ch] == 2)
-        unsign  [ch] = 1 << (lsb_bits[ch] - 1);
+            unsign[ch] = 1 << (lsb_bits[ch] - 1);
         else
             unsign[ch] = 0;
     }
