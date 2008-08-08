@@ -480,6 +480,51 @@ static void input_data(MLPEncodeContext *ctx, const short *samples,
     }
 }
 
+static int no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
+                            unsigned int channel,
+                            int16_t min, int16_t max,
+                            int16_t *poffset, int *plsb_bits)
+{
+    DecodingParams *dp = &ctx->decoding_params[substr];
+    int16_t offset, unsign;
+    uint16_t diff;
+    int nbits;
+
+    /* Set offset inside huffoffset's boundaries by adjusting extremes
+     * so that more bits are used thus shifting the offset. */
+    if (min < HUFF_OFFSET_MIN)
+        max = FFMAX(max, HUFF_OFFSET_MIN + HUFF_OFFSET_MIN - min + 1);
+    if (max > HUFF_OFFSET_MAX)
+        min = FFMIN(min, HUFF_OFFSET_MAX + HUFF_OFFSET_MAX - max - 1);
+
+    /* Determine offset and minimum number of bits. */
+    diff = max - min;
+
+    for (nbits = 16; nbits && !(diff & (1<<(nbits-1))); nbits--);
+
+    unsign = 1 << (nbits - 1);
+
+    /* If all samples are the same (nbits == 0), offset must be
+     * adjusted because of sign_shift. */
+    offset = min + diff / 2 + !!nbits;
+
+    /* Check if we can use the same offset as last access_unit to save
+     * on writing a new header. */
+    if (nbits + 8 == dp->huff_lsbs[channel]) {
+        int16_t cur_offset = dp->huff_offset[channel];
+        int16_t cur_max    = cur_offset + unsign - 1;
+        int16_t cur_min    = cur_offset - unsign;
+
+        if (min > cur_min && max < cur_max)
+            offset = cur_offset;
+    }
+
+    *poffset   = offset;
+    *plsb_bits = nbits;
+
+    return nbits * dp->blocksize;
+}
+
 static void determine_bits(MLPEncodeContext *ctx)
 {
     unsigned int substr;
@@ -491,8 +536,8 @@ static void determine_bits(MLPEncodeContext *ctx)
 
         for (channel = 0; channel <= rh->max_channel; channel++) {
             int16_t min = INT16_MAX, max = INT16_MIN;
-            int16_t unsign, offset;
-            uint16_t diff;
+            int16_t offset;
+            int bitcount;
             int nbits, i;
 
             /* Determine extremes. */
@@ -504,34 +549,8 @@ static void determine_bits(MLPEncodeContext *ctx)
                     max = sample;
             }
 
-            /* Set offset inside huffoffset's boundaries by adjusting extremes
-             * so that more bits are used thus shifting the offset. */
-            if (min < HUFF_OFFSET_MIN)
-                max = FFMAX(max, HUFF_OFFSET_MIN + HUFF_OFFSET_MIN - min + 1);
-            if (max > HUFF_OFFSET_MAX)
-                min = FFMIN(min, HUFF_OFFSET_MAX + HUFF_OFFSET_MAX - max - 1);
-
-            /* Determine offset and minimum number of bits. */
-            diff = max - min;
-
-            for (nbits = 16; nbits && !(diff & (1<<(nbits-1))); nbits--);
-
-            unsign = 1 << (nbits - 1);
-
-            /* If all samples are the same (nbits == 0), offset must be
-             * adjusted because of sign_shift. */
-            offset = min + diff / 2 + !!nbits;
-
-            /* Check if we can use the same offset as last access_unit to save
-             * on writing a new header. */
-            if (nbits + 8 == dp->huff_lsbs[channel]) {
-                int16_t cur_offset = dp->huff_offset[channel];
-                int16_t cur_max    = cur_offset + unsign - 1;
-                int16_t cur_min    = cur_offset - unsign;
-
-                if (min > cur_min && max < cur_max)
-                    offset = cur_offset;
-            }
+            bitcount = no_codebook_bits(ctx, substr, channel,
+                                        min, max, &offset, &nbits);
 
             /* Update context. */
             dp->huff_offset[channel] = offset;
