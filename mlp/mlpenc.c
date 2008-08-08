@@ -536,14 +536,6 @@ static void determine_bits(MLPEncodeContext *ctx)
             /* Update context. */
             dp->huff_offset[channel] = offset;
             dp->huff_lsbs  [channel] = nbits + 8;
-
-            /* Unsign and offset all samples. */
-            for (i = 0; i < dp->blocksize; i++) {
-                int32_t sample = ctx->sample_buffer[i][channel] >> 8;
-                sample -= offset;
-                sample += unsign;
-                ctx->sample_buffer[i][channel] = sample;
-            }
         }
     }
 }
@@ -553,16 +545,25 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
+    int16_t unsign[MAX_CHANNELS];
+    int16_t offset[MAX_CHANNELS];
     int lsb_bits[MAX_CHANNELS];
     unsigned int i, ch;
 
     for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
         lsb_bits[ch] = dp->huff_lsbs[ch] - dp->quant_step_size[ch];
+        offset  [ch] = dp->huff_offset[ch];
+        unsign  [ch] = 1 << (lsb_bits[ch] - 1);
     }
 
     for (i = 0; i < dp->blocksize; i++) {
         for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
-            put_sbits(pb, lsb_bits[ch], ctx->sample_buffer[i][ch]);
+            int32_t sample = (int16_t) (ctx->sample_buffer[i][ch] >> 8);
+
+            sample -= offset[ch];
+            sample += unsign[ch];
+
+            put_sbits(pb, lsb_bits[ch], sample);
         }
     }
 }
