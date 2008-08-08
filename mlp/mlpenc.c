@@ -552,13 +552,15 @@ static int no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
                                  unsigned int channel, int codebook,
                                  int32_t min, int32_t max, int16_t offset,
-                                 int *plsb_bits, int *pcount)
+                                 int *plsb_bits, int *pcount, int *pnext)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     int32_t codebook_min = codebook_extremes[codebook][0];
     int32_t codebook_max = codebook_extremes[codebook][1];
     int codebook_offset  = codebook_offsets [codebook];
     int lsb_bits = 0, bitcount = 0;
+    int next = INT_MAX;
+    int unsign, mask;
     int i;
 
     min -= offset;
@@ -570,10 +572,19 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
         max >>= 1;
     }
 
+    unsign = 1 << lsb_bits;
+    mask   = unsign - 1;
+
     for (i = 0; i < dp->blocksize; i++) {
         int32_t sample = (int16_t) (ctx->sample_buffer[i][channel] >> 8);
+        int temp_next;
 
         sample  -= offset;
+
+        temp_next = unsign - (sample & mask);
+        if (temp_next < next)
+            next = temp_next;
+
         sample >>= lsb_bits;
 
         bitcount += huffman_tables[codebook][sample + codebook_offset][1];
@@ -584,6 +595,7 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
 
     *plsb_bits = lsb_bits;
     *pcount    = lsb_bits * dp->blocksize + bitcount;
+    *pnext     = next;
 }
 
 static int codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
@@ -596,16 +608,17 @@ static int codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     int16_t best_offset = 0;
     int best_lsb_bits = 0;
     int offset;
+    int next;
 
     offset_min = FFMAX(min, HUFF_OFFSET_MIN);
     offset_max = FFMIN(max, HUFF_OFFSET_MAX);
 
-    for (offset = offset_min; offset <= offset_max; offset++) {
+    for (offset = offset_min; offset <= offset_max; offset += next) {
         int lsb_bits, count;
 
         codebook_bits_offset(ctx, substr, channel, codebook,
                              min, max, offset,
-                             &lsb_bits, &count);
+                             &lsb_bits, &count, &next);
 
         if (count < best_count) {
             best_lsb_bits = lsb_bits;
