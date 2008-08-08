@@ -480,6 +480,30 @@ static void input_data(MLPEncodeContext *ctx, const short *samples,
     }
 }
 
+static const uint8_t huffman_tables[3][18][2] = {
+    {    /* huffman table 0, -7 - +10 */
+        {0x01, 9}, {0x01, 8}, {0x01, 7}, {0x01, 6}, {0x01, 5}, {0x01, 4}, {0x01, 3},
+        {0x04, 3}, {0x05, 3}, {0x06, 3}, {0x07, 3},
+        {0x03, 3}, {0x05, 4}, {0x09, 5}, {0x11, 6}, {0x21, 7}, {0x41, 8}, {0x81, 9},
+    }, { /* huffman table 1, -7 - +8 */
+        {0x01, 9}, {0x01, 8}, {0x01, 7}, {0x01, 6}, {0x01, 5}, {0x01, 4}, {0x01, 3},
+        {0x02, 2}, {0x03, 2},
+        {0x03, 3}, {0x05, 4}, {0x09, 5}, {0x11, 6}, {0x21, 7}, {0x41, 8}, {0x81, 9},
+    }, { /* huffman table 2, -7 - +7 */
+        {0x01, 9}, {0x01, 8}, {0x01, 7}, {0x01, 6}, {0x01, 5}, {0x01, 4}, {0x01, 3},
+        {0x01, 1},
+        {0x03, 3}, {0x05, 4}, {0x09, 5}, {0x11, 6}, {0x21, 7}, {0x41, 8}, {0x81, 9},
+    }
+};
+
+static int codebook_extremes[3][2] = {
+    {-9, 8}, {-8, 7}, {-7, 7},
+};
+
+static int codebook_offsets[3] = {
+    9, 8, 7,
+};
+
 static int no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                             unsigned int channel,
                             int16_t min, int16_t max,
@@ -525,6 +549,77 @@ static int no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     return lsb_bits * dp->blocksize;
 }
 
+static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
+                                 unsigned int channel, int codebook,
+                                 int32_t min, int32_t max, int16_t offset,
+                                 int *plsb_bits, int *pcount)
+{
+    DecodingParams *dp = &ctx->decoding_params[substr];
+    int codebook_offset  = codebook_offsets[codebook];
+    int32_t codebook_min = codebook_extremes[codebook][0];
+    int32_t codebook_max = codebook_extremes[codebook][1];
+    int lsb_bits = 0, bitcount = 0;
+    int i;
+
+    min -= offset;
+    max -= offset;
+
+    while (min < codebook_min || max > codebook_max) {
+        lsb_bits++;
+        min >>= 1;
+        max >>= 1;
+    }
+
+    for (i = 0; i < dp->blocksize; i++) {
+        int32_t sample = (int16_t) (ctx->sample_buffer[i][channel] >> 8);
+
+        sample  -= offset;
+        sample >>= lsb_bits;
+
+        bitcount += huffman_tables[codebook][sample + codebook_offset][1];
+    }
+
+    if (codebook == 2)
+        lsb_bits++;
+
+    *plsb_bits = lsb_bits;
+    *pcount    = lsb_bits * dp->blocksize + bitcount;
+}
+
+static int codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
+                         unsigned int channel, int codebook,
+                         int16_t min, int16_t max,
+                         int16_t *poffset, int *plsb_bits)
+{
+    int best_count = INT_MAX;
+    int16_t best_offset = 0;
+    int best_lsb_bits = 0;
+    int offset;
+    int offset_min, offset_max;
+
+    offset_min = FFMAX(min, HUFF_OFFSET_MIN);
+    offset_max = FFMIN(max, HUFF_OFFSET_MAX);
+
+    for (offset = offset_min; offset <= offset_max; offset++) {
+        int lsb_bits, count;
+
+        codebook_bits_offset(ctx, substr, channel, codebook,
+                             min, max, offset,
+                             &lsb_bits, &count);
+
+        if (count < best_count) {
+            best_lsb_bits = lsb_bits;
+            best_offset   = offset;
+            best_count    = count;
+         }
+    }
+
+    *plsb_bits = best_lsb_bits;
+    *poffset   = best_offset;
+
+    return best_count;
+}
+
 static void determine_bits(MLPEncodeContext *ctx)
 {
     unsigned int substr;
@@ -536,9 +631,11 @@ static void determine_bits(MLPEncodeContext *ctx)
 
         for (channel = 0; channel <= rh->max_channel; channel++) {
             int16_t min = INT16_MAX, max = INT16_MIN;
-            int16_t offset;
-            int bitcount;
-            int lsb_bits, i;
+            int best_bitcount = INT_MAX;
+            int best_codebook = 0;
+            int16_t offset[3];
+            int bitcount[3];
+            int lsb_bits[3], i;
 
             /* Determine extremes. */
             for (i = 0; i < dp->blocksize; i++) {
@@ -549,12 +646,26 @@ static void determine_bits(MLPEncodeContext *ctx)
                     max = sample;
             }
 
-            bitcount = no_codebook_bits(ctx, substr, channel,
-                                        min, max, &offset, &lsb_bits);
+            bitcount[0] = no_codebook_bits(ctx, substr, channel,
+                                           min, max, &offset[0], &lsb_bits[0]);
+
+            for (i = 1; i < 3; i++) {
+                bitcount[i] = codebook_bits(ctx, substr, channel, i - 1,
+                                            min, max, &offset[i], &lsb_bits[i]);
+            }
+
+            /* Choose best codebook. */
+            for (i = 0; i < 3; i++) {
+                if (bitcount[i] < best_bitcount) {
+                    best_bitcount = bitcount[i];
+                    best_codebook = i;
+                }
+            }
 
             /* Update context. */
-            dp->huff_offset[channel] = offset;
-            dp->huff_lsbs  [channel] = lsb_bits + 8;
+            dp->huff_offset[channel] = offset  [best_codebook];
+            dp->huff_lsbs  [channel] = lsb_bits[best_codebook] + 8;
+            dp->codebook   [channel] = best_codebook;
         }
     }
 }
@@ -564,6 +675,8 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
+    int codebook_offset[MAX_CHANNELS];
+    int codebook[MAX_CHANNELS];
     int16_t unsign[MAX_CHANNELS];
     int16_t offset[MAX_CHANNELS];
     int lsb_bits[MAX_CHANNELS];
@@ -571,8 +684,15 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 
     for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
         lsb_bits[ch] = dp->huff_lsbs[ch] - dp->quant_step_size[ch];
+        codebook       [ch] = dp->codebook   [ch] - 1;
         offset  [ch] = dp->huff_offset[ch];
+        codebook_offset[ch] = codebook_offsets[codebook[ch]];
+
+        /* Unsign if needed. */
+        if (codebook[ch] == -1 || codebook[ch] == 2)
         unsign  [ch] = 1 << (lsb_bits[ch] - 1);
+        else
+            unsign[ch] = 0;
     }
 
     for (i = 0; i < dp->blocksize; i++) {
@@ -581,6 +701,12 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 
             sample -= offset[ch];
             sample += unsign[ch];
+
+            if (codebook[ch] >= 0) {
+                int8_t vlc = (sample >> lsb_bits[ch]) + codebook_offset[ch];
+                put_bits(pb, huffman_tables[codebook[ch]][vlc][1],
+                             huffman_tables[codebook[ch]][vlc][0]);
+            }
 
             put_sbits(pb, lsb_bits[ch], sample);
         }
