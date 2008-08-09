@@ -763,18 +763,23 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     BestOffset best_bo = { 0, INT_MAX, 0, };
     int offset;
     int next;
-    int previous_count = INT_MAX;
-    int is_greater = 0;
+    int previous_count;
+    int is_greater;
+    int direction;
 
     offset_min = FFMAX(min, HUFF_OFFSET_MIN);
     offset_max = FFMIN(max, HUFF_OFFSET_MAX);
 
-    for (offset = average; offset >= offset_min; offset -= next) {
+    for (direction = 0; direction < 2; direction++) {
+        previous_count = INT_MAX;
+        is_greater = 0;
+
+    for (offset = average; offset >= offset_min;) {
         BestOffset temp_bo;
 
         codebook_bits_offset(ctx, substr, channel, codebook,
                              min, max, offset,
-                             &temp_bo, &next, 1);
+                             &temp_bo, &next, !direction);
 
         if (temp_bo.bitcount < best_bo.bitcount)
             best_bo = temp_bo;
@@ -785,26 +790,12 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
             break;
 
         previous_count = temp_bo.bitcount;
+
+        if (direction)
+            offset += next;
+        else
+            offset -= next;
     }
-
-    previous_count = INT_MAX;
-    is_greater = 0;
-    for (offset = average; offset <= offset_max; offset += next) {
-        BestOffset temp_bo;
-
-        codebook_bits_offset(ctx, substr, channel, codebook,
-                             min, max, offset,
-                             &temp_bo, &next, 0);
-
-        if (temp_bo.bitcount < best_bo.bitcount)
-            best_bo = temp_bo;
-
-        if (temp_bo.bitcount < previous_count)
-            is_greater = 0;
-        else if (++is_greater >= 5)
-            break;
-
-        previous_count = temp_bo.bitcount;
     }
 
     *bo = best_bo;
