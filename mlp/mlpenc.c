@@ -33,6 +33,9 @@
 #define MAX_BLOCKSIZE       (40 * (MAX_SAMPLERATE / 48000))
 #define MAX_BLOCKSIZE_POW2  (64 * (MAX_SAMPLERATE / 48000))
 
+#define MAX_FILTER_ORDER    8
+#define NUM_FILTERS         2
+
 #define FIR 0
 #define IIR 1
 
@@ -80,6 +83,13 @@ typedef struct {
 } DecodingParams;
 
 typedef struct {
+    uint8_t         order;
+    uint8_t         shift;
+    int32_t         coeff[MAX_FILTER_ORDER];
+    int32_t         state[MAX_FILTER_ORDER];
+} FilterParams;
+
+typedef struct {
     AVCodecContext *avctx;
 
     int             num_substreams;
@@ -92,6 +102,8 @@ typedef struct {
     uint16_t        timestamp;
 
     uint8_t         mlp_channels;
+
+    FilterParams    filter_params[MAX_CHANNELS][NUM_FILTERS];
 
     DecodingParams  decoding_params[MAX_SUBSTREAMS];
     RestartHeader   restart_header[MAX_SUBSTREAMS];
@@ -342,8 +354,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 /*      param_presence_flags |= PARAM_MATRIX; */
 /*      param_presence_flags |= PARAM_OUTSHIFT; */
         param_presence_flags |= PARAM_QUANTSTEP;
-/*      param_presence_flags |= PARAM_FIR; */
-/*      param_presence_flags |= PARAM_IIR; */
+        param_presence_flags |= PARAM_FIR;
+        param_presence_flags |= PARAM_IIR;
         param_presence_flags |= PARAM_HUFFOFFSET;
 
         dp->param_presence_flags = param_presence_flags;
@@ -352,10 +364,73 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     return 0;
 }
 
+static int inline number_sbits(int number)
+{
+    int bits = 0;
+
+    if      (number > 0)
+        for (bits = 31; bits && !(number & (1<<(bits-1))); bits--);
+    else if (number < 0)
+        for (bits = 31; bits &&  (number & (1<<(bits-1))); bits--);
+
+    return bits + 1;
+}
+
+static void code_filter_coeffs(MLPEncodeContext *ctx,
+                               unsigned int channel, unsigned int filter,
+                               int *pcoeff_shift, int *pcoeff_bits)
+{
+    FilterParams *fp = &ctx->filter_params[channel][filter];
+    int min = INT_MAX, max = INT_MIN;
+    int bits, shift;
+    int or = 0;
+    int order;
+
+    for (order = 0; order < fp->order; order++) {
+        int coeff = fp->coeff[order];
+
+        if (coeff < min)
+            min = coeff;
+        if (fp->coeff[order] > max)
+            max = coeff;
+
+        or |= coeff;
+    }
+
+    bits = FFMAX(number_sbits(min), number_sbits(max));
+
+    for (shift = 0; shift < 7 && !(or & (1<<shift)); shift++);
+
+    *pcoeff_bits  = bits;
+    *pcoeff_shift = shift;
+}
+
 static void write_filter_params(MLPEncodeContext *ctx, PutBitContext *pb,
                                 unsigned int channel, unsigned int filter)
 {
-    return;
+    FilterParams *fp = &ctx->filter_params[channel][filter];
+
+    put_bits(pb, 4, fp->order);
+
+    if (fp->order > 0) {
+        int coeff_shift;
+        int coeff_bits;
+        int i;
+
+        code_filter_coeffs(ctx, channel, filter, &coeff_shift, &coeff_bits);
+
+        put_bits(pb, 4, fp->shift  );
+        put_bits(pb, 5, coeff_bits );
+        put_bits(pb, 3, coeff_shift);
+
+        for (i = 0; i < fp->order; i++) {
+            int coeff = fp->coeff[i] >> coeff_shift;
+
+            put_sbits(pb, coeff_bits, coeff);
+        }
+
+        put_bits(pb, 1, 0);
+    }
 }
 
 static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
@@ -477,6 +552,77 @@ static void input_data(MLPEncodeContext *ctx, const short *samples,
         }
 
         lossless_check_data[substr] = lossless_check_data_temp;
+    }
+}
+
+static void set_filter_params(MLPEncodeContext *ctx,
+                              unsigned int channel, unsigned int filter)
+{
+    FilterParams *fp = &ctx->filter_params[channel][filter];
+
+    if (filter == FIR) {
+        fp->order    =  4;
+        fp->shift    =  0;
+        fp->coeff[0] =  1;
+        fp->coeff[1] =  0;
+        fp->coeff[2] =  0;
+        fp->coeff[3] =  0;
+    } else { /* IIR */
+        fp->order    =  4;
+        fp->shift    =  0;
+        fp->coeff[0] =  0;
+        fp->coeff[1] =  0;
+        fp->coeff[2] =  0;
+        fp->coeff[3] =  0;
+    }
+}
+
+#define MSB_MASK(bits)  (-1u << bits)
+
+static void apply_filter(MLPEncodeContext *ctx, unsigned int channel)
+{
+    int32_t filter_state_buffer[NUM_FILTERS][MAX_BLOCKSIZE + MAX_FILTER_ORDER];
+    FilterParams *fp[NUM_FILTERS] = { &ctx->filter_params[channel][FIR],
+                                      &ctx->filter_params[channel][IIR], };
+    int32_t mask = MSB_MASK(8); /* TODO quant_step_size */
+    unsigned int filter_shift = fp[FIR]->shift;
+    int index = MAX_BLOCKSIZE;
+    int filter;
+    int i;
+
+    for (filter = 0; filter < NUM_FILTERS; filter++) {
+        memcpy(&filter_state_buffer[filter][MAX_BLOCKSIZE],
+               &fp[filter]->state[0],
+               MAX_FILTER_ORDER * sizeof(int32_t));
+    }
+
+    for (i = 0; i < ctx->avctx->frame_size; i++) {
+        int32_t sample = (int32_t) ((int16_t)(ctx->sample_buffer[i][channel] >> 8)) << 8;
+        unsigned int order;
+        int64_t accum = 0;
+        int32_t residual;
+
+        for (filter = 0; filter < NUM_FILTERS; filter++)
+            for (order = 0; order < fp[filter]->order; order++)
+                accum += (int64_t)filter_state_buffer[filter][index + order] *
+                         fp[filter]->coeff[order];
+
+        accum  >>= filter_shift;
+        residual = sample - (accum & mask);
+
+        --index;
+
+        filter_state_buffer[FIR][index] = sample;
+        filter_state_buffer[IIR][index] = residual;
+
+        /* Store residual. */
+        ctx->sample_buffer[i][channel] = residual;
+    }
+
+    for (filter = 0; filter < NUM_FILTERS; filter++) {
+        memcpy(&fp[filter]->state[0],
+               &filter_state_buffer[filter][index],
+               MAX_FILTER_ORDER * sizeof(int32_t));
     }
 }
 
@@ -782,6 +928,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     uint16_t parity_nibble = 0;
     int length, total_length;
     unsigned int substr;
+    int channel, filter;
     int write_headers;
     PutBitContext pb;
     int end = 0;
@@ -824,6 +971,12 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     total_length = buf - buf0;
 
     input_data(ctx, data, lossless_check_data);
+
+    for (channel = 0; channel < avctx->channels; channel++) {
+        for (filter = 0; filter < NUM_FILTERS; filter++)
+            set_filter_params(ctx, channel, filter);
+        apply_filter(ctx, channel);
+    }
 
     determine_bits(ctx);
 
