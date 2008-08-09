@@ -777,9 +777,8 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                              min, max, offset,
                              &temp_bo, &previous, &next);
 
-        if (temp_bo.bitcount < best_bo.bitcount) {
+        if (temp_bo.bitcount < best_bo.bitcount)
             best_bo = temp_bo;
-         }
 
         if (temp_bo.bitcount < previous_count)
             is_greater = 0;
@@ -798,9 +797,8 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                              min, max, offset,
                              &temp_bo, &previous, &next);
 
-        if (temp_bo.bitcount < best_bo.bitcount) {
+        if (temp_bo.bitcount < best_bo.bitcount)
             best_bo = temp_bo;
-         }
 
         if (temp_bo.bitcount < previous_count)
             is_greater = 0;
