@@ -703,14 +703,14 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
                                  unsigned int channel, int codebook,
                                  int32_t min, int32_t max, int16_t offset,
-                                 BestOffset *bo, int *pprevious, int *pnext)
+                                 BestOffset *bo, int *pnext, int previous)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     int32_t codebook_min = codebook_extremes[codebook][0];
     int32_t codebook_max = codebook_extremes[codebook][1];
     int codebook_offset  = codebook_offsets [codebook];
     int lsb_bits = 0, bitcount = 0;
-    int previous = INT_MAX, next = INT_MAX;
+    int next = INT_MAX;
     int unsign, mask;
     int i;
 
@@ -728,15 +728,15 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
 
     for (i = 0; i < dp->blocksize; i++) {
         int32_t sample = ctx->sample_buffer[i][channel] >> 8;
-        int temp_previous, temp_next;
+        int temp_next;
 
         sample  -= offset;
 
-        temp_previous = (sample & mask) + 1;
-        if (temp_previous < previous)
-            previous = temp_previous;
-
+        if (previous)
+        temp_next = (sample & mask) + 1;
+        else
         temp_next = unsign - (sample & mask);
+
         if (temp_next < next)
             next = temp_next;
 
@@ -751,7 +751,6 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
     bo->offset   = offset;
     bo->lsb_bits = lsb_bits;
     bo->bitcount = lsb_bits * dp->blocksize + bitcount;
-    *pprevious = previous;
     *pnext     = next;
 }
 
@@ -763,19 +762,19 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     int offset_min, offset_max;
     BestOffset best_bo = { 0, INT_MAX, 0, };
     int offset;
-    int previous, next;
+    int next;
     int previous_count = INT_MAX;
     int is_greater = 0;
 
     offset_min = FFMAX(min, HUFF_OFFSET_MIN);
     offset_max = FFMIN(max, HUFF_OFFSET_MAX);
 
-    for (offset = average; offset >= offset_min; offset -= previous) {
+    for (offset = average; offset >= offset_min; offset -= next) {
         BestOffset temp_bo;
 
         codebook_bits_offset(ctx, substr, channel, codebook,
                              min, max, offset,
-                             &temp_bo, &previous, &next);
+                             &temp_bo, &next, 1);
 
         if (temp_bo.bitcount < best_bo.bitcount)
             best_bo = temp_bo;
@@ -795,7 +794,7 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 
         codebook_bits_offset(ctx, substr, channel, codebook,
                              min, max, offset,
-                             &temp_bo, &previous, &next);
+                             &temp_bo, &next, 0);
 
         if (temp_bo.bitcount < best_bo.bitcount)
             best_bo = temp_bo;
