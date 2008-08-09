@@ -800,7 +800,6 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 
         if (temp_bo.bitcount < best_bo.bitcount) {
             best_bo = temp_bo;
-            best_bo.offset = offset;
          }
 
         if (temp_bo.bitcount < previous_count)
