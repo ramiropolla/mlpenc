@@ -698,14 +698,14 @@ static int no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
                                  unsigned int channel, int codebook,
                                  int32_t min, int32_t max, int16_t offset,
-                                 int *plsb_bits, int *pcount, int *pnext)
+                                 int *plsb_bits, int *pcount, int *pprevious, int *pnext)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     int32_t codebook_min = codebook_extremes[codebook][0];
     int32_t codebook_max = codebook_extremes[codebook][1];
     int codebook_offset  = codebook_offsets [codebook];
     int lsb_bits = 0, bitcount = 0;
-    int next = INT_MAX;
+    int previous = INT_MAX, next = INT_MAX;
     int unsign, mask;
     int i;
 
@@ -723,9 +723,13 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
 
     for (i = 0; i < dp->blocksize; i++) {
         int32_t sample = ctx->sample_buffer[i][channel] >> 8;
-        int temp_next;
+        int temp_previous, temp_next;
 
         sample  -= offset;
+
+        temp_previous = (sample & mask) + 1;
+        if (temp_previous < previous)
+            previous = temp_previous;
 
         temp_next = unsign - (sample & mask);
         if (temp_next < next)
@@ -741,12 +745,13 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
 
     *plsb_bits = lsb_bits;
     *pcount    = lsb_bits * dp->blocksize + bitcount;
+    *pprevious = previous;
     *pnext     = next;
 }
 
 static int codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                          unsigned int channel, int codebook,
-                         int16_t min, int16_t max,
+                         int average, int16_t min, int16_t max,
                          int16_t *poffset, int *plsb_bits)
 {
     int offset_min, offset_max;
@@ -754,23 +759,55 @@ static int codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     int16_t best_offset = 0;
     int best_lsb_bits = 0;
     int offset;
-    int next;
+    int previous, next;
+    int previous_count = INT_MAX;
+    int is_greater = 0;
 
     offset_min = FFMAX(min, HUFF_OFFSET_MIN);
     offset_max = FFMIN(max, HUFF_OFFSET_MAX);
 
-    for (offset = offset_min; offset <= offset_max; offset += next) {
+    for (offset = average; offset >= offset_min; offset -= previous) {
         int lsb_bits, count;
 
         codebook_bits_offset(ctx, substr, channel, codebook,
                              min, max, offset,
-                             &lsb_bits, &count, &next);
+                             &lsb_bits, &count, &previous, &next);
 
         if (count < best_count) {
             best_lsb_bits = lsb_bits;
             best_offset   = offset;
             best_count    = count;
          }
+
+        if (count < previous_count)
+            is_greater = 0;
+        else if (++is_greater >= 5)
+            break;
+
+        previous_count = count;
+    }
+
+    previous_count = INT_MAX;
+    is_greater = 0;
+    for (offset = average; offset <= offset_max; offset += next) {
+        int lsb_bits, count;
+
+        codebook_bits_offset(ctx, substr, channel, codebook,
+                             min, max, offset,
+                             &lsb_bits, &count, &previous, &next);
+
+        if (count < best_count) {
+            best_lsb_bits = lsb_bits;
+            best_offset   = offset;
+            best_count    = count;
+         }
+
+        if (count < previous_count)
+            is_greater = 0;
+        else if (++is_greater >= 5)
+            break;
+
+        previous_count = count;
     }
 
     *plsb_bits = best_lsb_bits;
@@ -795,22 +832,25 @@ static void determine_bits(MLPEncodeContext *ctx)
             int16_t offset[3];
             int bitcount[3];
             int lsb_bits[3];
+            int average = 0;
             int i;
 
-            /* Determine extremes. */
+            /* Determine extremes and average. */
             for (i = 0; i < dp->blocksize; i++) {
                 int32_t sample = ctx->sample_buffer[i][channel] >> 8;
                 if (sample < min)
                     min = sample;
                 if (sample > max)
                     max = sample;
+                average += sample;
             }
+            average /= dp->blocksize;
 
             bitcount[0] = no_codebook_bits(ctx, substr, channel,
                                            min, max, &offset[0], &lsb_bits[0]);
 
             for (i = 1; i < 3; i++) {
-                bitcount[i] = codebook_bits(ctx, substr, channel, i - 1,
+                bitcount[i] = codebook_bits(ctx, substr, channel, i - 1, average,
                                             min, max, &offset[i], &lsb_bits[i]);
             }
 
