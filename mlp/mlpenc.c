@@ -545,8 +545,8 @@ static void input_data(MLPEncodeContext *ctx, const short *samples,
         for (channel = 0; channel <= rh->max_channel; channel++) {
             for (i = 0; i < dp->blocksize; i++) {
                 int32_t sample = samples[i * (rh->max_channel + 1) + channel];
-                sample = (sample << 8) & 0x00ffffff;
-                lossless_check_data_temp ^= sample << channel;
+                sample <<= 8;
+                lossless_check_data_temp ^= (sample & 0x00ffffff) << channel;
                 ctx->sample_buffer[i][channel] = sample;
             }
         }
@@ -597,7 +597,7 @@ static void apply_filter(MLPEncodeContext *ctx, unsigned int channel)
     }
 
     for (i = 0; i < ctx->avctx->frame_size; i++) {
-        int32_t sample = (int32_t) ((int16_t)(ctx->sample_buffer[i][channel] >> 8)) << 8;
+        int32_t sample = ctx->sample_buffer[i][channel];
         unsigned int order;
         int64_t accum = 0;
         int32_t residual;
@@ -722,7 +722,7 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
     mask   = unsign - 1;
 
     for (i = 0; i < dp->blocksize; i++) {
-        int32_t sample = (int16_t) (ctx->sample_buffer[i][channel] >> 8);
+        int32_t sample = ctx->sample_buffer[i][channel] >> 8;
         int temp_next;
 
         sample  -= offset;
@@ -857,7 +857,7 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 
     for (i = 0; i < dp->blocksize; i++) {
         for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
-            int32_t sample = (int16_t) (ctx->sample_buffer[i][ch] >> 8);
+            int32_t sample = ctx->sample_buffer[i][ch] >> 8;
 
             sample -= offset[ch];
             sample += unsign[ch];
