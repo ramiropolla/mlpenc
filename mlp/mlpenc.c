@@ -748,6 +748,7 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
     if (codebook == 2)
         lsb_bits++;
 
+    bo->offset   = offset;
     bo->lsb_bits = lsb_bits;
     bo->bitcount = lsb_bits * dp->blocksize + bitcount;
     *pprevious = previous;
@@ -778,7 +779,6 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 
         if (temp_bo.bitcount < best_bo.bitcount) {
             best_bo = temp_bo;
-            best_bo.offset = offset;
          }
 
         if (temp_bo.bitcount < previous_count)
