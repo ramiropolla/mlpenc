@@ -650,10 +650,16 @@ static int codebook_offsets[3] = {
     9, 8, 7,
 };
 
-static int no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
+typedef struct BestOffset {
+    int16_t offset;
+    int bitcount;
+    int lsb_bits;
+} BestOffset;
+
+static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                             unsigned int channel,
                             int16_t min, int16_t max,
-                            int16_t *poffset, int *plsb_bits)
+                            BestOffset *bo)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     int16_t offset, unsign;
@@ -689,16 +695,15 @@ static int no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
             offset = cur_offset;
     }
 
-    *poffset   = offset;
-    *plsb_bits = lsb_bits;
-
-    return lsb_bits * dp->blocksize;
+    bo->offset   = offset;
+    bo->lsb_bits = lsb_bits;
+    bo->bitcount = lsb_bits * dp->blocksize;
 }
 
 static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
                                  unsigned int channel, int codebook,
                                  int32_t min, int32_t max, int16_t offset,
-                                 int *plsb_bits, int *pcount, int *pprevious, int *pnext)
+                                 BestOffset *bo, int *pprevious, int *pnext)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     int32_t codebook_min = codebook_extremes[codebook][0];
@@ -743,21 +748,19 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
     if (codebook == 2)
         lsb_bits++;
 
-    *plsb_bits = lsb_bits;
-    *pcount    = lsb_bits * dp->blocksize + bitcount;
+    bo->lsb_bits = lsb_bits;
+    bo->bitcount = lsb_bits * dp->blocksize + bitcount;
     *pprevious = previous;
     *pnext     = next;
 }
 
-static int codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
+static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                          unsigned int channel, int codebook,
                          int average, int16_t min, int16_t max,
-                         int16_t *poffset, int *plsb_bits)
+                         BestOffset *bo)
 {
     int offset_min, offset_max;
-    int best_count = INT_MAX;
-    int16_t best_offset = 0;
-    int best_lsb_bits = 0;
+    BestOffset best_bo = { 0, INT_MAX, 0, };
     int offset;
     int previous, next;
     int previous_count = INT_MAX;
@@ -767,53 +770,48 @@ static int codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     offset_max = FFMIN(max, HUFF_OFFSET_MAX);
 
     for (offset = average; offset >= offset_min; offset -= previous) {
-        int lsb_bits, count;
+        BestOffset temp_bo;
 
         codebook_bits_offset(ctx, substr, channel, codebook,
                              min, max, offset,
-                             &lsb_bits, &count, &previous, &next);
+                             &temp_bo, &previous, &next);
 
-        if (count < best_count) {
-            best_lsb_bits = lsb_bits;
-            best_offset   = offset;
-            best_count    = count;
+        if (temp_bo.bitcount < best_bo.bitcount) {
+            best_bo = temp_bo;
+            best_bo.offset = offset;
          }
 
-        if (count < previous_count)
+        if (temp_bo.bitcount < previous_count)
             is_greater = 0;
         else if (++is_greater >= 5)
             break;
 
-        previous_count = count;
+        previous_count = temp_bo.bitcount;
     }
 
     previous_count = INT_MAX;
     is_greater = 0;
     for (offset = average; offset <= offset_max; offset += next) {
-        int lsb_bits, count;
+        BestOffset temp_bo;
 
         codebook_bits_offset(ctx, substr, channel, codebook,
                              min, max, offset,
-                             &lsb_bits, &count, &previous, &next);
+                             &temp_bo, &previous, &next);
 
-        if (count < best_count) {
-            best_lsb_bits = lsb_bits;
-            best_offset   = offset;
-            best_count    = count;
+        if (temp_bo.bitcount < best_bo.bitcount) {
+            best_bo = temp_bo;
+            best_bo.offset = offset;
          }
 
-        if (count < previous_count)
+        if (temp_bo.bitcount < previous_count)
             is_greater = 0;
         else if (++is_greater >= 5)
             break;
 
-        previous_count = count;
+        previous_count = temp_bo.bitcount;
     }
 
-    *plsb_bits = best_lsb_bits;
-    *poffset   = best_offset;
-
-    return best_count;
+    *bo = best_bo;
 }
 
 static void determine_bits(MLPEncodeContext *ctx)
@@ -829,9 +827,7 @@ static void determine_bits(MLPEncodeContext *ctx)
             int16_t min = INT16_MAX, max = INT16_MIN;
             int best_bitcount = INT_MAX;
             int best_codebook = 0;
-            int16_t offset[3];
-            int bitcount[3];
-            int lsb_bits[3];
+            BestOffset bo[3];
             int average = 0;
             int i;
 
@@ -846,25 +842,24 @@ static void determine_bits(MLPEncodeContext *ctx)
             }
             average /= dp->blocksize;
 
-            bitcount[0] = no_codebook_bits(ctx, substr, channel,
-                                           min, max, &offset[0], &lsb_bits[0]);
+            no_codebook_bits(ctx, substr, channel, min, max, &bo[0]);
 
             for (i = 1; i < 3; i++) {
-                bitcount[i] = codebook_bits(ctx, substr, channel, i - 1, average,
-                                            min, max, &offset[i], &lsb_bits[i]);
+                codebook_bits(ctx, substr, channel, i - 1, average,
+                                            min, max, &bo[i]);
             }
 
             /* Choose best codebook. */
             for (i = 0; i < 3; i++) {
-                if (bitcount[i] < best_bitcount) {
-                    best_bitcount = bitcount[i];
+                if (bo[i].bitcount < best_bitcount) {
+                    best_bitcount = bo[i].bitcount;
                     best_codebook = i;
                 }
             }
 
             /* Update context. */
-            dp->huff_offset[channel] = offset  [best_codebook];
-            dp->huff_lsbs  [channel] = lsb_bits[best_codebook] + 8;
+            dp->huff_offset[channel] = bo[best_codebook].offset;
+            dp->huff_lsbs  [channel] = bo[best_codebook].lsb_bits + 8;
             dp->codebook   [channel] = best_codebook;
         }
     }
