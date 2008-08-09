@@ -799,7 +799,7 @@ static void determine_bits(MLPEncodeContext *ctx)
 
             /* Determine extremes. */
             for (i = 0; i < dp->blocksize; i++) {
-                int16_t sample = ctx->sample_buffer[i][channel] >> 8;
+                int32_t sample = ctx->sample_buffer[i][channel] >> 8;
                 if (sample < min)
                     min = sample;
                 if (sample > max)
