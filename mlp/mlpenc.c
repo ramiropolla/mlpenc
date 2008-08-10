@@ -847,7 +847,7 @@ static void determine_bits(MLPEncodeContext *ctx)
             int16_t min = INT16_MAX, max = INT16_MIN;
             int best_bitcount = INT_MAX;
             int best_codebook = 0;
-            BestOffset bo[3];
+            BestOffset bo[4];
             int average = 0;
             int i;
 
