@@ -707,7 +707,7 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     /* Determine offset and minimum number of bits. */
     diff = max - min;
 
-    for (lsb_bits = 16; lsb_bits && !(diff & (1<<(lsb_bits-1))); lsb_bits--);
+    lsb_bits = number_sbits(diff) - 1;
 
     unsign = 1 << (lsb_bits - 1);
 
