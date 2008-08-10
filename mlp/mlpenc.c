@@ -734,7 +734,7 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
                                  unsigned int channel, int codebook,
                                  int32_t min, int32_t max, int16_t offset,
-                                 BestOffset *bo, int *pnext, int previous)
+                                 BestOffset *bo, int *pnext, int up)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     int32_t codebook_min = codebook_extremes[codebook][0];
@@ -763,10 +763,10 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
 
         sample -= offset;
 
-        if (previous)
-            temp_next = (sample & mask) + 1;
-        else
+        if (up)
             temp_next = unsign - (sample & mask);
+        else
+            temp_next = (sample & mask) + 1;
 
         if (temp_next < next)
             next = temp_next;
@@ -808,7 +808,7 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 
             codebook_bits_offset(ctx, substr, channel, codebook,
                                  min, max, offset,
-                                 &temp_bo, &next, !direction);
+                                 &temp_bo, &next, direction);
 
             if (temp_bo.bitcount < previous_count) {
                 if (temp_bo.bitcount < bo->bitcount)
