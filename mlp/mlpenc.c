@@ -793,18 +793,16 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 {
     BestOffset best_bo = { 0, INT_MAX, 0, };
     int offset_min, offset_max;
-    int previous_count;
-    int is_greater;
     int direction;
-    int offset;
-    int next;
 
     offset_min = FFMAX(min, HUFF_OFFSET_MIN);
     offset_max = FFMIN(max, HUFF_OFFSET_MAX);
 
     for (direction = 0; direction < 2; direction++) {
-        previous_count = INT_MAX;
-        is_greater = 0;
+        int previous_count = INT_MAX;
+        int is_greater = 0;
+        int offset;
+        int next;
 
         for (offset = average; offset >= offset_min &&
                                offset <= offset_max;) {
