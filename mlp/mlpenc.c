@@ -845,9 +845,8 @@ static void determine_bits(MLPEncodeContext *ctx)
 
         for (channel = 0; channel <= rh->max_channel; channel++) {
             int16_t min = INT16_MAX, max = INT16_MIN;
-            int best_bitcount = INT_MAX;
             int best_codebook = 0;
-            BestOffset bo[4];
+            BestOffset bo, temp_bo;
             int average = 0;
             int i;
 
@@ -862,24 +861,21 @@ static void determine_bits(MLPEncodeContext *ctx)
             }
             average /= dp->blocksize;
 
-            no_codebook_bits(ctx, substr, channel, min, max, &bo[0]);
+            no_codebook_bits(ctx, substr, channel, min, max, &bo);
 
             for (i = 1; i < 4; i++) {
                 codebook_bits(ctx, substr, channel, i - 1, average,
-                              min, max, &bo[i]);
-            }
+                              min, max, &temp_bo);
 
-            /* Choose best codebook. */
-            for (i = 0; i < 4; i++) {
-                if (bo[i].bitcount < best_bitcount) {
-                    best_bitcount = bo[i].bitcount;
+                if (temp_bo.bitcount < bo.bitcount) {
+                    bo = temp_bo;
                     best_codebook = i;
                 }
             }
 
             /* Update context. */
-            dp->huff_offset[channel] = bo[best_codebook].offset;
-            dp->huff_lsbs  [channel] = bo[best_codebook].lsb_bits + 8;
+            dp->huff_offset[channel] = bo.offset;
+            dp->huff_lsbs  [channel] = bo.lsb_bits + 8;
             dp->codebook   [channel] = best_codebook;
         }
     }
