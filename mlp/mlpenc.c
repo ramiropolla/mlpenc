@@ -641,6 +641,16 @@ static const uint8_t *huffman_bits[] = {
     huffman_bits0, huffman_bits1, huffman_bits2,
 };
 
+static const uint8_t huffman_bitcount2[] = {
+    9, 9, 8, 8, 7, 7, 6, 6, 5, 5, 4, 4, 3, 3,
+    1, 1,
+    3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9,
+};
+
+static const uint8_t *huffman_bitcount[] = {
+    huffman_bits0, huffman_bits1, huffman_bitcount2,
+};
+
 static const uint8_t huffman_codes0[] = {
     0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
     0x04, 0x05, 0x06, 0x07,
@@ -664,7 +674,7 @@ static const uint8_t *huffman_codes[] = {
 };
 
 static int codebook_extremes[3][2] = {
-    {-9, 8}, {-8, 7}, {-7, 7},
+    {-9, 8}, {-8, 7}, {-15, 14},
 };
 
 static int codebook_offsets[3] = {
@@ -729,7 +739,7 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
     DecodingParams *dp = &ctx->decoding_params[substr];
     int32_t codebook_min = codebook_extremes[codebook][0];
     int32_t codebook_max = codebook_extremes[codebook][1];
-    int codebook_offset  = codebook_offsets [codebook];
+    int codebook_offset  = -codebook_min;
     int lsb_bits = 0, bitcount = 0;
     int next = INT_MAX;
     int unsign, mask;
@@ -763,7 +773,7 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
 
         sample >>= lsb_bits;
 
-        bitcount += huffman_bits[codebook][sample + codebook_offset];
+        bitcount += huffman_bitcount[codebook][sample + codebook_offset];
     }
 
     if (codebook == 2)
@@ -854,13 +864,13 @@ static void determine_bits(MLPEncodeContext *ctx)
 
             no_codebook_bits(ctx, substr, channel, min, max, &bo[0]);
 
-            for (i = 1; i < 3; i++) {
+            for (i = 1; i < 4; i++) {
                 codebook_bits(ctx, substr, channel, i - 1, average,
                               min, max, &bo[i]);
             }
 
             /* Choose best codebook. */
-            for (i = 0; i < 3; i++) {
+            for (i = 0; i < 4; i++) {
                 if (bo[i].bitcount < best_bitcount) {
                     best_bitcount = bo[i].bitcount;
                     best_codebook = i;
