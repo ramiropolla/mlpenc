@@ -789,16 +789,14 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
 static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                           unsigned int channel, int codebook,
                           int average, int16_t min, int16_t max,
-                          BestOffset *bo)
+                          BestOffset *bo, int direction)
 {
-    BestOffset best_bo = { 0, INT_MAX, 0, };
     int offset_min, offset_max;
-    int direction;
 
     offset_min = FFMAX(min, HUFF_OFFSET_MIN);
     offset_max = FFMIN(max, HUFF_OFFSET_MAX);
 
-    for (direction = 0; direction < 2; direction++) {
+    {
         int previous_count = INT_MAX;
         int is_greater = 0;
         int offset;
@@ -813,8 +811,8 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                                  &temp_bo, &next, !direction);
 
             if (temp_bo.bitcount < previous_count) {
-                if (temp_bo.bitcount < best_bo.bitcount)
-                    best_bo = temp_bo;
+                if (temp_bo.bitcount < bo->bitcount)
+                    *bo = temp_bo;
 
                 is_greater = 0;
             } else if (++is_greater >= 5)
@@ -828,8 +826,6 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                 offset -= next;
         }
     }
-
-    *bo = best_bo;
 }
 
 static void determine_bits(MLPEncodeContext *ctx)
@@ -844,7 +840,7 @@ static void determine_bits(MLPEncodeContext *ctx)
         for (channel = 0; channel <= rh->max_channel; channel++) {
             int16_t min = INT16_MAX, max = INT16_MIN;
             int best_codebook = 0;
-            BestOffset bo, temp_bo;
+            BestOffset bo, temp_bo = { 0, INT_MAX, 0, };
             int average = 0;
             int i;
 
@@ -863,7 +859,9 @@ static void determine_bits(MLPEncodeContext *ctx)
 
             for (i = 1; i < 4; i++) {
                 codebook_bits(ctx, substr, channel, i - 1, average,
-                              min, max, &temp_bo);
+                              min, max, &temp_bo, 0);
+                codebook_bits(ctx, substr, channel, i - 1, average,
+                              min, max, &temp_bo, 1);
 
                 if (temp_bo.bitcount < bo.bitcount) {
                     bo = temp_bo;
