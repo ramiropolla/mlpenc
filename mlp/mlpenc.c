@@ -813,7 +813,7 @@ static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                 *bo = temp_bo;
 
             is_greater = 0;
-        } else if (++is_greater >= 5)
+        } else if (++is_greater >= 3)
             break;
 
         previous_count = temp_bo.bitcount;
