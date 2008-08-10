@@ -896,7 +896,24 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
     }
 }
 
+static int compare_filter_params(FilterParams *prev, FilterParams *fp)
+{
+    int i;
+
+    if (prev->order != fp->order)
+        return 1;
+    if (prev->shift != fp->shift)
+        return 1;
+
+    for (i = 0; i < fp->order; i++)
+        if (prev->coeff[i] != fp->coeff[i])
+            return 1;
+
+    return 0;
+}
+
 static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
+                                FilterParams filter_params[MAX_CHANNELS][NUM_FILTERS],
                                 unsigned int substr, int write_all)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
@@ -925,8 +942,16 @@ static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
             retval |= PARAM_QUANTSTEP;
 
     for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
+        FilterParams *prev_fir = &filter_params[ch][FIR];
+        FilterParams *prev_iir = &filter_params[ch][IIR];
+        FilterParams *fir = &ctx->filter_params[ch][FIR];
+        FilterParams *iir = &ctx->filter_params[ch][IIR];
 
-        /* TODO Check filters. */
+        if (compare_filter_params(prev_fir, fir))
+            retval |= PARAM_FIR;
+
+        if (compare_filter_params(prev_iir, iir))
+            retval |= PARAM_IIR;
 
         if (prev->huff_offset[ch] != dp->huff_offset[ch])
             retval |= PARAM_HUFFOFFSET;
@@ -942,6 +967,7 @@ static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                             void *data)
 {
+    FilterParams filter_params[MAX_CHANNELS][NUM_FILTERS];
     DecodingParams decoding_params[MAX_SUBSTREAMS];
     uint16_t substream_data_len[MAX_SUBSTREAMS];
     int32_t lossless_check_data[MAX_SUBSTREAMS];
@@ -963,6 +989,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     }
 
     memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
+    memcpy(filter_params, ctx->filter_params, sizeof(filter_params));
 
     if (buf_size < 4)
         return -1;
@@ -1019,6 +1046,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         }
 
         params_changed = decoding_params_diff(ctx, &decoding_params[substr],
+                                              filter_params,
                                               substr, write_headers);
 
         if (write_headers || params_changed) {
