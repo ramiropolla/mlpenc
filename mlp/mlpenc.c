@@ -812,10 +812,10 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                                  min, max, offset,
                                  &temp_bo, &next, !direction);
 
+            if (temp_bo.bitcount < previous_count) {
             if (temp_bo.bitcount < best_bo.bitcount)
                 best_bo = temp_bo;
 
-            if (temp_bo.bitcount < previous_count) {
                 is_greater = 0;
             } else if (++is_greater >= 5)
                 break;
