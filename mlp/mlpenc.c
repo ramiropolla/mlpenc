@@ -555,9 +555,15 @@ static void input_data(MLPEncodeContext *ctx, const short *samples,
 }
 
 static void set_filter_params(MLPEncodeContext *ctx,
-                              unsigned int channel, unsigned int filter)
+                              unsigned int channel, unsigned int filter,
+                              int write_headers)
 {
     FilterParams *fp = &ctx->filter_params[channel][filter];
+
+    if (write_headers) {
+        fp->order    =  0;
+        return;
+    }
 
     if (filter == FIR) {
         fp->order    =  4;
@@ -1046,7 +1052,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     for (channel = 0; channel < avctx->channels; channel++) {
         for (filter = 0; filter < NUM_FILTERS; filter++)
-            set_filter_params(ctx, channel, filter);
+            set_filter_params(ctx, channel, filter, write_headers);
         apply_filter(ctx, channel);
     }
 
