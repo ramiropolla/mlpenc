@@ -731,7 +731,7 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     bo->bitcount = lsb_bits * dp->blocksize;
 }
 
-static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
+static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
                                  unsigned int channel, int codebook,
                                  int32_t min, int32_t max, int16_t offset,
                                  BestOffset *bo, int *pnext, int up)
@@ -786,7 +786,7 @@ static void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
     *pnext       = next;
 }
 
-static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
+static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                           unsigned int channel, int codebook,
                           int average, int16_t min, int16_t max,
                           BestOffset *bo, int direction)
