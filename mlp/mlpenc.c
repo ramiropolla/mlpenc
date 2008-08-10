@@ -794,14 +794,13 @@ static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     int previous_count = INT_MAX;
     int offset_min, offset_max;
     int is_greater = 0;
-    int offset;
+    int offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
     int next;
 
-    average = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
     offset_min = FFMAX(min, HUFF_OFFSET_MIN);
     offset_max = FFMIN(max, HUFF_OFFSET_MAX);
 
-    for (offset = average; ;) {
+    for (;;) {
         BestOffset temp_bo;
 
         codebook_bits_offset(ctx, substr, channel, codebook,
