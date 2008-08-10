@@ -1002,7 +1002,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     unsigned int substr;
     int channel, filter;
     int write_headers;
-    PutBitContext pb;
     int end = 0;
 
     if (avctx->frame_size > MAX_BLOCKSIZE) {
@@ -1055,7 +1054,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         DecodingParams *dp = &ctx->decoding_params[substr];
         RestartHeader  *rh = &ctx->restart_header [substr];
         uint8_t parity, checksum;
-        PutBitContext tmpb;
+        PutBitContext pb, tmpb;
         int params_changed;
         int last_block = 0;
 
