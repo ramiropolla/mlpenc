@@ -842,7 +842,7 @@ static void determine_bits(MLPEncodeContext *ctx)
         for (channel = 0; channel <= rh->max_channel; channel++) {
             int16_t min = INT16_MAX, max = INT16_MIN;
             int best_codebook = 0;
-            BestOffset bo, temp_bo = { 0, INT_MAX, 0, };
+            BestOffset bo;
             int average = 0;
             int i;
 
@@ -860,6 +860,8 @@ static void determine_bits(MLPEncodeContext *ctx)
             no_codebook_bits(ctx, substr, channel, min, max, &bo);
 
             for (i = 1; i < 4; i++) {
+                BestOffset temp_bo = { 0, INT_MAX, 0, };
+
                 codebook_bits(ctx, substr, channel, i - 1, average,
                               min, max, &temp_bo, 0);
                 codebook_bits(ctx, substr, channel, i - 1, average,
