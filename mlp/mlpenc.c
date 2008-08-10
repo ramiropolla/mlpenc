@@ -791,44 +791,41 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                           int average, int16_t min, int16_t max,
                           BestOffset *bo, int direction)
 {
+    int previous_count = INT_MAX;
     int offset_min, offset_max;
+    int is_greater = 0;
+    int offset;
+    int next;
 
     average = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
     offset_min = FFMAX(min, HUFF_OFFSET_MIN);
     offset_max = FFMIN(max, HUFF_OFFSET_MAX);
 
-    {
-        int previous_count = INT_MAX;
-        int is_greater = 0;
-        int offset;
-        int next;
+    for (offset = average; ;) {
+        BestOffset temp_bo;
 
-        for (offset = average; ;) {
-            BestOffset temp_bo;
+        codebook_bits_offset(ctx, substr, channel, codebook,
+                                min, max, offset,
+                                &temp_bo, &next, direction);
 
-            codebook_bits_offset(ctx, substr, channel, codebook,
-                                 min, max, offset,
-                                 &temp_bo, &next, direction);
+        if (temp_bo.bitcount < previous_count) {
+            if (temp_bo.bitcount < bo->bitcount)
+                *bo = temp_bo;
 
-            if (temp_bo.bitcount < previous_count) {
-                if (temp_bo.bitcount < bo->bitcount)
-                    *bo = temp_bo;
+            is_greater = 0;
+        } else if (++is_greater >= 5)
+            break;
 
-                is_greater = 0;
-            } else if (++is_greater >= 5)
+        previous_count = temp_bo.bitcount;
+
+        if (direction) {
+            offset += next;
+            if (offset > offset_max)
                 break;
-
-            previous_count = temp_bo.bitcount;
-
-            if (direction) {
-                offset += next;
-                if (offset > offset_max)
-                    break;
-            } else {
-                offset -= next;
-                if (offset < offset_min)
-                    break;
-            }
+        } else {
+            offset -= next;
+            if (offset < offset_min)
+                break;
         }
     }
 }
