@@ -803,8 +803,7 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
         int offset;
         int next;
 
-        for (offset = average; offset >= offset_min &&
-                               offset <= offset_max;) {
+        for (offset = average; ;) {
             BestOffset temp_bo;
 
             codebook_bits_offset(ctx, substr, channel, codebook,
@@ -823,8 +822,12 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 
             if (direction) {
                 offset += next;
+                if (offset > offset_max)
+                    break;
             } else {
                 offset -= next;
+                if (offset < offset_min)
+                    break;
             }
         }
     }
