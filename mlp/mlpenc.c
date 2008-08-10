@@ -1065,8 +1065,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         int params_changed;
         int last_block = 0;
 
-        init_put_bits(&pb, buf, buf_size);
-
         if (avctx->frame_size < dp->blocksize) {
             dp->blocksize = avctx->frame_size;
             last_block = 1;
@@ -1075,6 +1073,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         params_changed = decoding_params_diff(ctx, &decoding_params[substr],
                                               filter_params,
                                               substr, write_headers);
+
+        init_put_bits(&pb, buf, buf_size);
 
         if (write_headers || params_changed) {
             put_bits(&pb, 1, 1);
