@@ -244,8 +244,7 @@ lucky 1054c0300008080001b538c
     AV_WL16(buf+26, mlp_checksum16(buf, 26));
 }
 
-/* TODO pass only PutBitContext and use pb->buffer. */
-static void write_restart_header(MLPEncodeContext *ctx, uint8_t *buf,
+static void write_restart_header(MLPEncodeContext *ctx,
                                  PutBitContext *pb, int substr)
 {
     RestartHeader *rh = &ctx->restart_header[substr];
@@ -278,7 +277,7 @@ static void write_restart_header(MLPEncodeContext *ctx, uint8_t *buf,
     tmpb = *pb;
     flush_put_bits(&tmpb);
 
-    checksum = mlp_restart_checksum(buf, put_bits_count(pb) - start_count);
+    checksum = mlp_restart_checksum(pb->buf, put_bits_count(pb) - start_count);
 
     put_bits(pb,  8, checksum);
 }
@@ -1056,7 +1055,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             if (write_headers) {
                 put_bits(&pb, 1, 1);
 
-                write_restart_header(ctx, buf, &pb, substr);
+                write_restart_header(ctx, &pb, substr);
                 rh->lossless_check_data = 0;
             } else {
                 put_bits(&pb, 1, 0);
