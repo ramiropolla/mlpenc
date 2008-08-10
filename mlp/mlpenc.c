@@ -829,11 +829,8 @@ static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     }
 }
 
-static void determine_bits(MLPEncodeContext *ctx)
+static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
 {
-    unsigned int substr;
-
-    for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams *dp = &ctx->decoding_params[substr];
         RestartHeader  *rh = &ctx->restart_header [substr];
         unsigned int channel;
@@ -877,7 +874,6 @@ static void determine_bits(MLPEncodeContext *ctx)
             dp->huff_lsbs  [channel] = bo.lsb_bits + 8;
             dp->codebook   [channel] = best_codebook;
         }
-    }
 }
 
 static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
@@ -1055,8 +1051,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         apply_filter(ctx, channel);
     }
 
-    determine_bits(ctx);
-
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams *dp = &ctx->decoding_params[substr];
         RestartHeader  *rh = &ctx->restart_header [substr];
@@ -1069,6 +1063,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             dp->blocksize = avctx->frame_size;
             last_block = 1;
         }
+
+        determine_bits(ctx, substr);
 
         params_changed = decoding_params_diff(ctx, &decoding_params[substr],
                                               filter_params,
