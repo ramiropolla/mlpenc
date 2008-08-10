@@ -821,10 +821,11 @@ static void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 
             previous_count = temp_bo.bitcount;
 
-            if (direction)
+            if (direction) {
                 offset += next;
-            else
+            } else {
                 offset -= next;
+            }
         }
     }
 }
