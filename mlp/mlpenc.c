@@ -286,6 +286,7 @@ static void write_restart_header(MLPEncodeContext *ctx,
 static av_cold int mlp_encode_init(AVCodecContext *avctx)
 {
     MLPEncodeContext *ctx = avctx->priv_data;
+    unsigned int quant_step_size;
     unsigned int substr;
 
     ctx->avctx = avctx;
@@ -304,11 +305,9 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     }
 
     switch (avctx->sample_fmt) {
-    case SAMPLE_FMT_S16:    ctx->sample_fmt = BITS_16; break;
+    case SAMPLE_FMT_S16: ctx->sample_fmt = BITS_16; quant_step_size = 8; break;
     /* TODO 20 bits: */
-    /* TODO Find out how to actually support 24 bits and update all occurences
-     * of hardcoded 8s with appropriate value (probably quant_step_size). */
-    case SAMPLE_FMT_S24:    ctx->sample_fmt = BITS_24; break;
+    case SAMPLE_FMT_S24: ctx->sample_fmt = BITS_24; quant_step_size = 0; break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Sample format not supported.\n");
         return -1;
@@ -345,7 +344,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         dp->blocksize          = avctx->frame_size;
 
         for (channel = 0; channel <= rh->max_channel; channel++) {
-            dp->quant_step_size[channel] = 8;
+            dp->quant_step_size[channel] = quant_step_size;
             dp->codebook       [channel] = 0;
             dp->huff_lsbs      [channel] = 24;
         }
@@ -530,8 +529,8 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
     }
 }
 
-static void input_data(MLPEncodeContext *ctx, const uint8_t *samples,
-                       int32_t *lossless_check_data)
+static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
+                                int32_t *lossless_check_data, int is24)
 {
     unsigned int substr;
 
@@ -544,8 +543,13 @@ static void input_data(MLPEncodeContext *ctx, const uint8_t *samples,
 
         for (i = 0; i < dp->blocksize; i++) {
             for (channel = 0; channel <= rh->max_channel; channel++) {
-                int32_t sample = (int16_t) bytestream_get_le16(&samples);
-                sample <<= 8;
+                int32_t sample;
+
+                if (is24) sample = (int32_t) bytestream_get_le32(&samples);
+                else      sample = (int16_t) bytestream_get_le16(&samples);
+
+                sample <<= dp->quant_step_size[channel];
+
                 lossless_check_data_temp ^= (sample & 0x00ffffff) << channel;
                 ctx->sample_buffer[i][channel] = sample;
             }
@@ -553,6 +557,15 @@ static void input_data(MLPEncodeContext *ctx, const uint8_t *samples,
 
         lossless_check_data[substr] = lossless_check_data_temp;
     }
+}
+
+static void input_data(MLPEncodeContext *ctx, void *samples,
+                       int32_t *lossless_check_data)
+{
+    if (ctx->avctx->sample_fmt == SAMPLE_FMT_S24)
+        input_data_internal(ctx, samples, lossless_check_data, 1);
+    else
+        input_data_internal(ctx, samples, lossless_check_data, 0);
 }
 
 static void set_filter_params(MLPEncodeContext *ctx,
@@ -588,12 +601,13 @@ static void set_filter_params(MLPEncodeContext *ctx,
 
 #define MSB_MASK(bits)  (-1u << bits)
 
+/* TODO What substream to use for applying filters to channel? */
 static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
 {
     int32_t filter_state_buffer[NUM_FILTERS][MAX_BLOCKSIZE + MAX_FILTER_ORDER];
     FilterParams *fp[NUM_FILTERS] = { &ctx->filter_params[channel][FIR],
                                       &ctx->filter_params[channel][IIR], };
-    int32_t mask = MSB_MASK(8); /* TODO quant_step_size */
+    int32_t mask = MSB_MASK(ctx->decoding_params[0].quant_step_size[channel]);
     unsigned int filter_shift = fp[FIR]->shift;
     int index = MAX_BLOCKSIZE;
     int filter;
@@ -709,12 +723,13 @@ typedef struct BestOffset {
 
 static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                              unsigned int channel,
-                             int16_t min, int16_t max,
+                             int32_t min, int32_t max,
                              BestOffset *bo)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
-    int16_t offset, unsign;
-    uint16_t diff;
+    int16_t offset;
+    int32_t unsign;
+    uint32_t diff;
     int lsb_bits;
 
     /* Set offset inside huffoffset's boundaries by adjusting extremes
@@ -737,10 +752,10 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 
     /* Check if we can use the same offset as last access_unit to save
      * on writing a new header. */
-    if (lsb_bits + 8 == dp->huff_lsbs[channel]) {
+    if (lsb_bits + dp->quant_step_size[channel] == dp->huff_lsbs[channel]) {
         int16_t cur_offset = dp->huff_offset[channel];
-        int16_t cur_max    = cur_offset + unsign - 1;
-        int16_t cur_min    = cur_offset - unsign;
+        int32_t cur_max    = cur_offset + unsign - 1;
+        int32_t cur_min    = cur_offset - unsign;
 
         if (min > cur_min && max < cur_max)
             offset = cur_offset;
@@ -778,7 +793,7 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int subs
     mask   = unsign - 1;
 
     for (i = 0; i < dp->blocksize; i++) {
-        int32_t sample = ctx->sample_buffer[i][channel] >> 8;
+        int32_t sample = ctx->sample_buffer[i][channel] >> dp->quant_step_size[channel];
         int temp_next;
 
         sample -= offset;
@@ -808,7 +823,7 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int subs
 
 static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                           unsigned int channel, int codebook,
-                          int average, int16_t min, int16_t max,
+                          int average, int32_t min, int32_t max,
                           BestOffset *bo, int direction)
 {
     int previous_count = INT_MAX;
@@ -856,7 +871,7 @@ static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
     unsigned int channel;
 
     for (channel = 0; channel <= rh->max_channel; channel++) {
-        int16_t min = INT16_MAX, max = INT16_MIN;
+        int32_t min = INT32_MAX, max = INT32_MIN;
         int best_codebook = 0;
         BestOffset bo;
         int average = 0;
@@ -864,7 +879,7 @@ static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
 
         /* Determine extremes and average. */
         for (i = 0; i < dp->blocksize; i++) {
-            int32_t sample = ctx->sample_buffer[i][channel] >> 8;
+            int32_t sample = ctx->sample_buffer[i][channel] >> dp->quant_step_size[channel];
             if (sample < min)
                 min = sample;
             if (sample > max)
@@ -891,7 +906,7 @@ static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
 
         /* Update context. */
         dp->huff_offset[channel] = bo.offset;
-        dp->huff_lsbs  [channel] = bo.lsb_bits + 8;
+        dp->huff_lsbs  [channel] = bo.lsb_bits + dp->quant_step_size[channel];
         dp->codebook   [channel] = best_codebook;
     }
 }
@@ -903,7 +918,7 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
     RestartHeader  *rh = &ctx->restart_header [substr];
     int codebook_offset[MAX_CHANNELS];
     int codebook[MAX_CHANNELS];
-    int16_t unsign[MAX_CHANNELS];
+    int32_t unsign[MAX_CHANNELS];
     int16_t offset[MAX_CHANNELS];
     int lsb_bits[MAX_CHANNELS];
     unsigned int i, ch;
@@ -923,7 +938,7 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 
     for (i = 0; i < dp->blocksize; i++) {
         for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
-            int32_t sample = ctx->sample_buffer[i][ch] >> 8;
+            int32_t sample = ctx->sample_buffer[i][ch] >> dp->quant_step_size[ch];
 
             sample -= offset[ch];
             sample += unsign[ch];
