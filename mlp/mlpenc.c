@@ -582,9 +582,12 @@ static void set_filter_params(MLPEncodeContext *ctx,
     }
 }
 
+#define INT24_MAX ((1 << 23) - 1)
+#define INT24_MIN (~INT24_MAX)
+
 #define MSB_MASK(bits)  (-1u << bits)
 
-static void apply_filter(MLPEncodeContext *ctx, unsigned int channel)
+static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
 {
     int32_t filter_state_buffer[NUM_FILTERS][MAX_BLOCKSIZE + MAX_FILTER_ORDER];
     FilterParams *fp[NUM_FILTERS] = { &ctx->filter_params[channel][FIR],
@@ -615,10 +618,18 @@ static void apply_filter(MLPEncodeContext *ctx, unsigned int channel)
         accum  >>= filter_shift;
         residual = sample - (accum & mask);
 
+        if (residual < INT24_MIN || residual > INT24_MAX)
+            return -1;
+
         --index;
 
         filter_state_buffer[FIR][index] = sample;
         filter_state_buffer[IIR][index] = residual;
+    }
+
+    index = MAX_BLOCKSIZE;
+    for (i = 0; i < ctx->avctx->frame_size; i++) {
+        int32_t residual = filter_state_buffer[IIR][--index];
 
         /* Store residual. */
         ctx->sample_buffer[i][channel] = residual;
@@ -629,6 +640,8 @@ static void apply_filter(MLPEncodeContext *ctx, unsigned int channel)
                &filter_state_buffer[filter][index],
                MAX_FILTER_ORDER * sizeof(int32_t));
     }
+
+    return 0;
 }
 
 static const uint8_t huffman_bits0[] = {
@@ -1053,7 +1066,13 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     for (channel = 0; channel < avctx->channels; channel++) {
         for (filter = 0; filter < NUM_FILTERS; filter++)
             set_filter_params(ctx, channel, filter, write_headers);
-        apply_filter(ctx, channel);
+        if (apply_filter(ctx, channel) < 0) {
+            /* Filter is horribly wrong.
+             * Clear filter params and update state. */
+            set_filter_params(ctx, channel, FIR, 1);
+            set_filter_params(ctx, channel, IIR, 1);
+            apply_filter(ctx, channel);
+        }
     }
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
