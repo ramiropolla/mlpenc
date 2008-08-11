@@ -22,6 +22,7 @@
 #include "avcodec.h"
 #include "bitstream.h"
 #include "libavutil/crc.h"
+#include "libavcodec/bytestream.h"
 
 /* TODO add comments! */
 
@@ -529,7 +530,7 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
     }
 }
 
-static void input_data(MLPEncodeContext *ctx, const short *samples,
+static void input_data(MLPEncodeContext *ctx, const uint8_t *samples,
                        int32_t *lossless_check_data)
 {
     unsigned int substr;
@@ -541,9 +542,9 @@ static void input_data(MLPEncodeContext *ctx, const short *samples,
         unsigned int channel;
         int i;
 
-        for (channel = 0; channel <= rh->max_channel; channel++) {
-            for (i = 0; i < dp->blocksize; i++) {
-                int32_t sample = samples[i * (rh->max_channel + 1) + channel];
+        for (i = 0; i < dp->blocksize; i++) {
+            for (channel = 0; channel <= rh->max_channel; channel++) {
+                int32_t sample = (int16_t) bytestream_get_le16(&samples);
                 sample <<= 8;
                 lossless_check_data_temp ^= (sample & 0x00ffffff) << channel;
                 ctx->sample_buffer[i][channel] = sample;
