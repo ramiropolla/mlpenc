@@ -652,42 +652,20 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
     return 0;
 }
 
-static const uint8_t huffman_bits0[] = {
-    9, 8, 7, 6, 5, 4, 3, 3, 3, 3, 3, 3, 4, 5, 6, 7, 8, 9,
-};
-
-static const uint8_t huffman_bits1[] = {
-    9, 8, 7, 6, 5, 4, 3,    2, 2,    3, 4, 5, 6, 7, 8, 9,
-};
-
-static const uint8_t huffman_bits2[] = {
-    9, 8, 7, 6, 5, 4, 3,      1,     3, 4, 5, 6, 7, 8, 9,
-};
-
-static const uint8_t *huffman_bits[] = {
-    huffman_bits0, huffman_bits1, huffman_bits2,
-};
-
-static const uint8_t huffman_codes0[] = {
-    0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-    0x04, 0x05, 0x06, 0x07,
-    0x03, 0x05, 0x09, 0x11, 0x21, 0x41, 0x81,
-};
-
-static const uint8_t huffman_codes1[] = {
-    0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-    0x02, 0x03,
-    0x03, 0x05, 0x09, 0x11, 0x21, 0x41, 0x81,
-};
-
-static const uint8_t huffman_codes2[] = {
-    0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01,
-    0x01,
-    0x03, 0x05, 0x09, 0x11, 0x21, 0x41, 0x81,
-};
-
-static const uint8_t *huffman_codes[] = {
-    huffman_codes0, huffman_codes1, huffman_codes2,
+static const uint8_t huffman_tables[3][18][2] = {
+    {    /* huffman table 0, -7 - +10 */
+        {0x01, 9}, {0x01, 8}, {0x01, 7}, {0x01, 6}, {0x01, 5}, {0x01, 4}, {0x01, 3},
+        {0x04, 3}, {0x05, 3}, {0x06, 3}, {0x07, 3},
+        {0x03, 3}, {0x05, 4}, {0x09, 5}, {0x11, 6}, {0x21, 7}, {0x41, 8}, {0x81, 9},
+    }, { /* huffman table 1, -7 - +8 */
+        {0x01, 9}, {0x01, 8}, {0x01, 7}, {0x01, 6}, {0x01, 5}, {0x01, 4}, {0x01, 3},
+        {0x02, 2}, {0x03, 2},
+        {0x03, 3}, {0x05, 4}, {0x09, 5}, {0x11, 6}, {0x21, 7}, {0x41, 8}, {0x81, 9},
+    }, { /* huffman table 2, -7 - +7 */
+        {0x01, 9}, {0x01, 8}, {0x01, 7}, {0x01, 6}, {0x01, 5}, {0x01, 4}, {0x01, 3},
+        {0x01, 1},
+        {0x03, 3}, {0x05, 4}, {0x09, 5}, {0x11, 6}, {0x21, 7}, {0x41, 8}, {0x81, 9},
+    }
 };
 
 static int codebook_extremes[3][2] = {
@@ -797,7 +775,7 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int subs
 
         sample >>= lsb_bits;
 
-        bitcount += huffman_bits[codebook][sample + codebook_offset];
+        bitcount += huffman_tables[codebook][sample + codebook_offset][1];
     }
 
     bo->offset   = offset;
@@ -927,8 +905,8 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 
             if (codebook[ch] >= 0) {
                 int8_t vlc = (sample >> lsb_bits[ch]) + codebook_offset[ch];
-                put_bits(pb, huffman_bits [codebook[ch]][vlc],
-                             huffman_codes[codebook[ch]][vlc]);
+                put_bits(pb, huffman_tables[codebook[ch]][vlc][1],
+                             huffman_tables[codebook[ch]][vlc][0]);
             }
 
             put_sbits(pb, lsb_bits[ch], sample);
