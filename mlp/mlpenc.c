@@ -22,7 +22,7 @@
 #include "avcodec.h"
 #include "bitstream.h"
 #include "libavutil/crc.h"
-#include "libavcodec/bytestream.h"
+#include "bytestream.h"
 
 /* TODO add comments! */
 
