@@ -580,19 +580,12 @@ static void set_filter_params(MLPEncodeContext *ctx,
     }
 
     if (filter == FIR) {
-        fp->order    =  4;
+        fp->order    =  1;
         fp->shift    =  0;
         fp->coeff[0] =  1;
-        fp->coeff[1] =  0;
-        fp->coeff[2] =  0;
-        fp->coeff[3] =  0;
     } else { /* IIR */
-        fp->order    =  4;
+        fp->order    =  0;
         fp->shift    =  0;
-        fp->coeff[0] =  0;
-        fp->coeff[1] =  0;
-        fp->coeff[2] =  0;
-        fp->coeff[3] =  0;
     }
 }
 
