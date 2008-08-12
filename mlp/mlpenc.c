@@ -672,10 +672,6 @@ static int codebook_extremes[3][2] = {
     {-9, 8}, {-8, 7}, {-15, 14},
 };
 
-static int codebook_offsets[3] = {
-    9, 8, 7,
-};
-
 typedef struct BestOffset {
     int16_t offset;
     int bitcount;
@@ -735,7 +731,7 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int subs
     DecodingParams *dp = &ctx->decoding_params[substr];
     int32_t codebook_min = codebook_extremes[codebook][0];
     int32_t codebook_max = codebook_extremes[codebook][1];
-    int codebook_offset  = codebook_offsets [codebook];
+    int codebook_offset  = 7 + (2 - codebook);
     int32_t unsign_offset = offset;
     int lsb_bits = 0, bitcount = 0;
     int next = INT_MAX;
@@ -890,7 +886,7 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
         lsb_bits       [ch] = dp->huff_lsbs  [ch] - dp->quant_step_size[ch];
         codebook       [ch] = dp->codebook   [ch] - 1;
         offset         [ch] = dp->huff_offset[ch];
-        codebook_offset[ch] = codebook_offsets[codebook[ch]];
+        codebook_offset[ch] = 7 + (2 - codebook[ch]);
 
         /* Unsign if needed. */
         if (codebook[ch] == -1 || codebook[ch] == 2)
