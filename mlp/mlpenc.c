@@ -354,7 +354,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 /*      param_presence_flags |= PARAM_OUTSHIFT; */
         param_presence_flags |= PARAM_QUANTSTEP;
         param_presence_flags |= PARAM_FIR;
-        param_presence_flags |= PARAM_IIR;
+/*      param_presence_flags |= PARAM_IIR; */
         param_presence_flags |= PARAM_HUFFOFFSET;
 
         dp->param_presence_flags = param_presence_flags;
