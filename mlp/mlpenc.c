@@ -1015,8 +1015,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         buf += put_bits_count(&pb) >> 3;
     }
 
-    length = buf - buf2;
-    total_length += length;
+    total_length += buf - buf2;
 
     /* Write headers. */
     length = total_length / 2;
