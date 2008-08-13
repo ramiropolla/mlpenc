@@ -438,7 +438,7 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams *dp = &ctx->decoding_params[substr];
         RestartHeader  *rh = &ctx->restart_header [substr];
-        int32_t lossless_check_data_temp = 0;
+        int32_t temp_lossless_check_data = 0;
         unsigned int channel;
         int i;
 
@@ -451,12 +451,12 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
 
                 sample <<= dp->quant_step_size[channel];
 
-                lossless_check_data_temp ^= (sample & 0x00ffffff) << channel;
+                temp_lossless_check_data ^= (sample & 0x00ffffff) << channel;
                 ctx->sample_buffer[i][channel] = sample;
             }
         }
 
-        lossless_check_data[substr] = lossless_check_data_temp;
+        lossless_check_data[substr] = temp_lossless_check_data;
     }
 }
 
