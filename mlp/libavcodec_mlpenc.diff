@@ -1,20 +1,20 @@
 Index: Changelog
 ===================================================================
---- Changelog	(revision 14247)
+--- Changelog	(revision 14733)
 +++ Changelog	(working copy)
-@@ -127,6 +127,7 @@
- - Motion Pixels Video decoder
- - Motion Pixels MVI demuxer
+@@ -129,6 +129,7 @@
  - removed animated GIF decoder/demuxer
+ - D-Cinema audio muxer
+ - Electronic Arts TGV decoder
 +- MLP/TrueHD encoder
  
  version 0.4.9-pre1:
  
 Index: doc/general.texi
 ===================================================================
---- doc/general.texi	(revision 14247)
+--- doc/general.texi	(revision 14733)
 +++ doc/general.texi	(working copy)
-@@ -380,7 +380,7 @@
+@@ -381,7 +381,7 @@
  @item MAXIS EA ADPCM         @tab     @tab  X
      @tab Used in Sim City 3000.
  @item Microsoft ADPCM        @tab  X  @tab  X
@@ -25,21 +25,21 @@ Index: doc/general.texi
      @tab Only versions 3.97-3.99 are supported.
 Index: libavcodec/Makefile
 ===================================================================
---- libavcodec/Makefile	(revision 14247)
+--- libavcodec/Makefile	(revision 14733)
 +++ libavcodec/Makefile	(working copy)
-@@ -109,6 +109,7 @@
+@@ -110,6 +110,7 @@
  OBJS-$(CONFIG_MJPEG_ENCODER)           += mjpegenc.o mjpeg.o mpegvideo_enc.o motion_est.o ratecontrol.o mpeg12data.o mpegvideo.o
  OBJS-$(CONFIG_MJPEGB_DECODER)          += mjpegbdec.o mjpegdec.o mjpeg.o
- OBJS-$(CONFIG_MLP_DECODER)             += mlpdec.o
+ OBJS-$(CONFIG_MLP_DECODER)             += mlp.o mlpdec.o
 +OBJS-$(CONFIG_MLP_ENCODER)             += mlpenc.o
  OBJS-$(CONFIG_MMVIDEO_DECODER)         += mmvideo.o
  OBJS-$(CONFIG_MOTIONPIXELS_DECODER)    += motionpixels.o
  OBJS-$(CONFIG_MP2_DECODER)             += mpegaudiodec.o mpegaudiodecheader.o mpegaudio.o mpegaudiodata.o
 Index: libavcodec/allcodecs.c
 ===================================================================
---- libavcodec/allcodecs.c	(revision 14247)
+--- libavcodec/allcodecs.c	(revision 14733)
 +++ libavcodec/allcodecs.c	(working copy)
-@@ -191,7 +191,7 @@
+@@ -192,7 +192,7 @@
      REGISTER_DECODER (IMC, imc);
      REGISTER_DECODER (MACE3, mace3);
      REGISTER_DECODER (MACE6, mace6);
@@ -50,14 +50,14 @@ Index: libavcodec/allcodecs.c
      REGISTER_DECODER (MP3ADU, mp3adu);
 Index: libavcodec/avcodec.h
 ===================================================================
---- libavcodec/avcodec.h	(revision 14247)
+--- libavcodec/avcodec.h	(revision 14733)
 +++ libavcodec/avcodec.h	(working copy)
 @@ -30,7 +30,7 @@
  #include "libavutil/avutil.h"
  
  #define LIBAVCODEC_VERSION_MAJOR 51
--#define LIBAVCODEC_VERSION_MINOR 60
-+#define LIBAVCODEC_VERSION_MINOR 61
+-#define LIBAVCODEC_VERSION_MINOR 64
++#define LIBAVCODEC_VERSION_MINOR 65
  #define LIBAVCODEC_VERSION_MICRO  0
  
  #define LIBAVCODEC_VERSION_INT  AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, \
