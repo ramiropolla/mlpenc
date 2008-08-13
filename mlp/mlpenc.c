@@ -509,12 +509,12 @@ static void input_data(MLPEncodeContext *ctx, void *samples,
  */
 static void set_filter_params(MLPEncodeContext *ctx,
                               unsigned int channel, unsigned int filter,
-                              int write_headers)
+                              int restart_frame)
 {
     FilterParams *fp = &ctx->channel_params[channel].filter_params[filter];
 
     /* Restart frames must not depend on filter state from previous frames. */
-    if (write_headers) {
+    if (restart_frame) {
         fp->order    =  0;
         return;
     }
@@ -988,13 +988,13 @@ static void write_frame_headers(MLPEncodeContext *ctx, uint8_t *frame_header,
  *  buffer if the filter is good enough. Sets the filter data to be cleared if
  *  this is a restart frame or no good filter was found.
  */
-static void determine_filters(MLPEncodeContext *ctx, int write_headers)
+static void determine_filters(MLPEncodeContext *ctx, int restart_frame)
 {
     int channel, filter;
 
     for (channel = 0; channel < ctx->avctx->channels; channel++) {
         for (filter = 0; filter < NUM_FILTERS; filter++)
-            set_filter_params(ctx, channel, filter, write_headers);
+            set_filter_params(ctx, channel, filter, restart_frame);
         if (apply_filter(ctx, channel) < 0) {
             /* Filter is horribly wrong.
              * Clear filter params and update state. */
@@ -1007,7 +1007,7 @@ static void determine_filters(MLPEncodeContext *ctx, int write_headers)
 
 /** Writes the substreams data to the bitstream. */
 static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
-                             int write_headers,
+                             int restart_frame,
                              DecodingParams decoding_params[MAX_SUBSTREAMS],
                              uint16_t substream_data_len[MAX_SUBSTREAMS],
                              int32_t lossless_check_data[MAX_SUBSTREAMS],
@@ -1033,14 +1033,14 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
         params_changed = decoding_params_diff(ctx, &decoding_params[substr],
                                               channel_params,
-                                              substr, write_headers);
+                                              substr, restart_frame);
 
         init_put_bits(&pb, buf, buf_size);
 
-        if (write_headers || params_changed) {
+        if (restart_frame || params_changed) {
             put_bits(&pb, 1, 1);
 
-            if (write_headers) {
+            if (restart_frame) {
                 put_bits(&pb, 1, 1);
 
                 write_restart_header(ctx, &pb, substr);
@@ -1099,7 +1099,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     uint8_t *buf2, *buf1, *buf0 = buf;
     int total_length;
     unsigned int substr;
-    int write_headers;
+    int restart_frame;
 
     if (avctx->frame_size > MAX_BLOCKSIZE) {
         av_log(avctx, AV_LOG_ERROR, "Invalid frame size (%d > %d)\n",
@@ -1117,9 +1117,9 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     buf      += 4;
     buf_size -= 4;
 
-    write_headers = !(avctx->frame_number & (MAJOR_HEADER_INTERVAL - 1));
+    restart_frame = !(avctx->frame_number & (MAJOR_HEADER_INTERVAL - 1));
 
-    if (write_headers) {
+    if (restart_frame) {
         if (buf_size < 28)
             return -1;
         write_major_sync(ctx, buf, buf_size);
@@ -1141,9 +1141,9 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     input_data(ctx, data, lossless_check_data);
 
-    determine_filters(ctx, write_headers);
+    determine_filters(ctx, restart_frame);
 
-    buf = write_substrs(ctx, buf, buf_size, write_headers, decoding_params,
+    buf = write_substrs(ctx, buf, buf_size, restart_frame, decoding_params,
                         substream_data_len, lossless_check_data, channel_params);
 
     total_length += buf - buf2;
