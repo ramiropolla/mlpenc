@@ -95,6 +95,7 @@ typedef struct {
 #define BITS_20         0x1
 #define BITS_24         0x2
 
+/** Returns the coded sample_rate for MLP. */
 static int mlp_sample_rate(int sample_rate)
 {
     switch (sample_rate) {
@@ -109,6 +110,7 @@ static int mlp_sample_rate(int sample_rate)
     }
 }
 
+/** Writes a major sync header to the bitstream. */
 static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
 {
     PutBitContext pb;
@@ -149,6 +151,10 @@ lucky 1054c0300008080001b538c
     AV_WL16(buf+26, ff_mlp_checksum16(buf, 26));
 }
 
+/** Writes a restart header to the bitstream. Damaged streams can start being
+ *  decoded losslessly again after such a header and the subsequent decoding
+ *  params header.
+ */
 static void write_restart_header(MLPEncodeContext *ctx,
                                  PutBitContext *pb, int substr)
 {
@@ -262,6 +268,9 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     return 0;
 }
 
+/** Calculates the smallest number of bits it takes to encode a given signed
+ *  value in two's complement.
+ */
 static int inline number_sbits(int number)
 {
     int bits = 0;
@@ -274,6 +283,10 @@ static int inline number_sbits(int number)
     return bits + 1;
 }
 
+/** Determines the smallest number of bits needed to encode the filter
+ *  coefficients, and if it's possible to right-shift their values without
+ *  loosing any precision.
+ */
 static void code_filter_coeffs(MLPEncodeContext *ctx,
                                unsigned int channel, unsigned int filter,
                                int *pcoeff_shift, int *pcoeff_bits)
@@ -303,6 +316,7 @@ static void code_filter_coeffs(MLPEncodeContext *ctx,
     *pcoeff_shift = shift;
 }
 
+/** Writes filter parameters for one filter to the bitstream. */
 static void write_filter_params(MLPEncodeContext *ctx, PutBitContext *pb,
                                 unsigned int channel, unsigned int filter)
 {
@@ -330,6 +344,9 @@ static void write_filter_params(MLPEncodeContext *ctx, PutBitContext *pb,
     }
 }
 
+/** Writes decoding parameters to the bitstream. These change very often,
+ *  usually at almost every frame.
+ */
 static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
                                   unsigned int substr, int params_changed)
 {
@@ -429,6 +446,10 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
     }
 }
 
+/** Inputs data from the samples passed by lavc into the context, shifts them
+ *  appropriately depending on the bit-depth, and calculates the
+ *  lossless_check_data that will be written to the restart header.
+ */
 static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
                                 int32_t *lossless_check_data, int is24)
 {
@@ -461,6 +482,7 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
     }
 }
 
+/** Wrapper function for inputting data in two different bit-depths. */
 static void input_data(MLPEncodeContext *ctx, void *samples,
                        int32_t *lossless_check_data)
 {
@@ -470,6 +492,10 @@ static void input_data(MLPEncodeContext *ctx, void *samples,
         input_data_internal(ctx, samples, lossless_check_data, 0);
 }
 
+/** Determines the best filter parameters for the given data and writes the
+ *  necessary information to the context.
+ *  TODO Add actual filter predictors!
+ */
 static void set_filter_params(MLPEncodeContext *ctx,
                               unsigned int channel, unsigned int filter,
                               int write_headers)
@@ -498,6 +524,12 @@ static void set_filter_params(MLPEncodeContext *ctx,
 #define MSB_MASK(bits)  (-1u << bits)
 
 /* TODO What substream to use for applying filters to channel? */
+
+/** Applies the filter to the current samples, and saves the residual back
+ *  into the samples buffer. If the filter is too bad and overflows the
+ *  maximum amount of bits allowed (24), the samples buffer is left as is and
+ *  the function returns -1.
+ */
 static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
 {
     FilterParams *fp[NUM_FILTERS] = { &ctx->channel_params[channel].filter_params[FIR],
@@ -555,6 +587,11 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
     return 0;
 }
 
+/** Min and max values that can be encoded with each codebook. The values for
+ *  the third codebook take into account the fact that the sign shift for this
+ *  codebook is outside the coded value, so it has one more bit of precision.
+ *  It should actually be -7 -> 7, shifted down by 0.5.
+ */
 static int codebook_extremes[3][2] = {
     {-9, 8}, {-8, 7}, {-15, 14},
 };
@@ -565,6 +602,9 @@ typedef struct BestOffset {
     int lsb_bits;
 } BestOffset;
 
+/** Determines the least amount of bits needed to encode the samples using no
+ *  codebooks.
+ */
 static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                              unsigned int channel,
                              int32_t min, int32_t max,
@@ -611,6 +651,9 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     bo->bitcount = lsb_bits * dp->blocksize;
 }
 
+/** Determines the least amount of bits needed to encode the samples using a
+ *  given codebook and a given offset.
+ */
 static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
                                  unsigned int channel, int codebook,
                                  int32_t min, int32_t max, int16_t offset,
@@ -669,6 +712,9 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int subs
     *pnext       = next;
 }
 
+/** Determines the least amount of bits needed to encode the samples using a
+ *  given codebook. Searches for the best offset to minimize the bits.
+ */
 static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                           unsigned int channel, int codebook,
                           int average, int32_t min, int32_t max,
@@ -712,6 +758,9 @@ static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     }
 }
 
+/** Determines the least amount of bits needed to encode the samples using
+ *  any or no codebook.
+ */
 static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
@@ -760,6 +809,9 @@ static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
     }
 }
 
+/** Writes the residuals to the bitstream. That is, the vlc codes from the
+ *  codebooks (if any is used), and then the residual.
+ */
 static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
                              unsigned int substr)
 {
@@ -807,6 +859,9 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
     }
 }
 
+/** Compares two FilterParams structures and returns 1 if anything has
+ *  changes. Returns 0 if they are both equal.
+ */
 static int compare_filter_params(FilterParams *prev, FilterParams *fp)
 {
     int i;
@@ -823,6 +878,9 @@ static int compare_filter_params(FilterParams *prev, FilterParams *fp)
     return 0;
 }
 
+/** Compares two DecodingParams and ChannelParams structures to decide if a
+ *  new decoding params header has to be written.
+ */
 static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
                                 ChannelParams channel_params[MAX_CHANNELS],
                                 unsigned int substr, int write_all)
@@ -877,6 +935,7 @@ static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
     return retval;
 }
 
+/** Writes the access unit and substream headers to the bitstream. */
 static void write_frame_headers(MLPEncodeContext *ctx, uint8_t *frame_header,
                                 uint8_t *substream_headers, unsigned int length,
                                 uint16_t substream_data_len[MAX_SUBSTREAMS])
@@ -914,6 +973,10 @@ static void write_frame_headers(MLPEncodeContext *ctx, uint8_t *frame_header,
     AV_WB16(frame_header+2, ctx->timestamp    );
 }
 
+/** Tries to determine a good prediction filter, and applies it to the samples
+ *  buffer if the filter is good enough. Sets the filter data to be cleared if
+ *  this is a restart frame or no good filter was found.
+ */
 static void determine_filters(MLPEncodeContext *ctx, int write_headers)
 {
     int channel, filter;
@@ -931,6 +994,7 @@ static void determine_filters(MLPEncodeContext *ctx, int write_headers)
     }
 }
 
+/** Writes the substreams data to the bitstream. */
 static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
                              int write_headers,
                              DecodingParams decoding_params[MAX_SUBSTREAMS],
