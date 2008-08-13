@@ -886,7 +886,6 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
-    int codebook_offset[MAX_CHANNELS];
     int codebook[MAX_CHANNELS];
     int32_t sign_huff_offset[MAX_CHANNELS];
     int lsb_bits[MAX_CHANNELS];
@@ -899,12 +898,16 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
         lsb_bits       [ch] = cp->huff_lsbs - dp->quant_step_size[ch];
         codebook       [ch] = cp->codebook  - 1;
         sign_huff_offset[ch] = cp->huff_offset;
-        codebook_offset[ch] = 7 + (2 - codebook[ch]);
 
         sign_shift = lsb_bits[ch] - 1;
 
+        if (codebook[ch] >= 0) {
+            sign_huff_offset[ch] -= 7 << lsb_bits[ch];
+            sign_shift += 2 - codebook[ch];
+        }
+
         /* Unsign if needed. */
-        if (codebook[ch] == -1 || codebook[ch] == 2)
+        if (sign_shift >= 0)
             sign_huff_offset[ch] -= 1 << sign_shift;
     }
 
@@ -915,7 +918,7 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
             sample -= sign_huff_offset[ch];
 
             if (codebook[ch] >= 0) {
-                int8_t vlc = (sample >> lsb_bits[ch]) + codebook_offset[ch];
+                int8_t vlc = sample >> lsb_bits[ch];
                 put_bits(pb, huffman_tables[codebook[ch]][vlc][1],
                              huffman_tables[codebook[ch]][vlc][0]);
             }
