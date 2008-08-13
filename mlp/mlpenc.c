@@ -323,9 +323,7 @@ static void write_filter_params(MLPEncodeContext *ctx, PutBitContext *pb,
         put_bits(pb, 3, coeff_shift);
 
         for (i = 0; i < fp->order; i++) {
-            int coeff = fp->coeff[i] >> coeff_shift;
-
-            put_sbits(pb, coeff_bits, coeff);
+            put_sbits(pb, coeff_bits, fp->coeff[i] >> coeff_shift);
         }
 
         put_bits(pb, 1, 0);
