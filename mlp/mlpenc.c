@@ -914,72 +914,15 @@ static void write_frame_headers(MLPEncodeContext *ctx, uint8_t *frame_header,
     AV_WB16(frame_header+2, ctx->timestamp    );
 }
 
-static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
-                            void *data)
+static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
+                             int write_headers,
+                             DecodingParams decoding_params[MAX_SUBSTREAMS],
+                             uint16_t substream_data_len[MAX_SUBSTREAMS],
+                             int32_t lossless_check_data[MAX_SUBSTREAMS],
+                             ChannelParams channel_params[MAX_CHANNELS])
 {
-    DecodingParams decoding_params[MAX_SUBSTREAMS];
-    uint16_t substream_data_len[MAX_SUBSTREAMS];
-    int32_t lossless_check_data[MAX_SUBSTREAMS];
-    ChannelParams channel_params[MAX_CHANNELS];
-    MLPEncodeContext *ctx = avctx->priv_data;
-    uint8_t *buf2, *buf1, *buf0 = buf;
-    int total_length;
     unsigned int substr;
-    int channel, filter;
-    int write_headers;
     int end = 0;
-
-    if (avctx->frame_size > MAX_BLOCKSIZE) {
-        av_log(avctx, AV_LOG_ERROR, "Invalid frame size (%d > %d)\n",
-               avctx->frame_size, MAX_BLOCKSIZE);
-        return -1;
-    }
-
-    memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
-    memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
-
-    if (buf_size < 4)
-        return -1;
-
-    /* Frame header will be written at the end. */
-    buf      += 4;
-    buf_size -= 4;
-
-    write_headers = !(avctx->frame_number & (MAJOR_HEADER_INTERVAL - 1));
-
-    if (write_headers) {
-        if (buf_size < 28)
-            return -1;
-        write_major_sync(ctx, buf, buf_size);
-        buf      += 28;
-        buf_size -= 28;
-    }
-
-    buf1 = buf;
-
-    /* Substream headers will be written at the end. */
-    for (substr = 0; substr < ctx->num_substreams; substr++) {
-        buf      += 2;
-        buf_size -= 2;
-    }
-
-    buf2 = buf;
-
-    total_length = buf - buf0;
-
-    input_data(ctx, data, lossless_check_data);
-
-    for (channel = 0; channel < avctx->channels; channel++) {
-        for (filter = 0; filter < NUM_FILTERS; filter++)
-            set_filter_params(ctx, channel, filter, write_headers);
-        if (apply_filter(ctx, channel) < 0) {
-            /* Filter is horribly wrong.
-             * Clear filter params and update state. */
-            set_filter_params(ctx, channel, FIR, 1);
-            set_filter_params(ctx, channel, IIR, 1);
-            apply_filter(ctx, channel);
-        }
-    }
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams *dp = &ctx->decoding_params[substr];
@@ -989,8 +932,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         int params_changed;
         int last_block = 0;
 
-        if (avctx->frame_size < dp->blocksize) {
-            dp->blocksize = avctx->frame_size;
+        if (ctx->avctx->frame_size < dp->blocksize) {
+            dp->blocksize = ctx->avctx->frame_size;
             last_block = 1;
         }
 
@@ -1049,6 +992,78 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
         buf += put_bits_count(&pb) >> 3;
     }
+
+    return buf;
+}
+
+static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
+                            void *data)
+{
+    DecodingParams decoding_params[MAX_SUBSTREAMS];
+    uint16_t substream_data_len[MAX_SUBSTREAMS];
+    int32_t lossless_check_data[MAX_SUBSTREAMS];
+    ChannelParams channel_params[MAX_CHANNELS];
+    MLPEncodeContext *ctx = avctx->priv_data;
+    uint8_t *buf2, *buf1, *buf0 = buf;
+    int total_length;
+    unsigned int substr;
+    int channel, filter;
+    int write_headers;
+
+    if (avctx->frame_size > MAX_BLOCKSIZE) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid frame size (%d > %d)\n",
+               avctx->frame_size, MAX_BLOCKSIZE);
+        return -1;
+    }
+
+    memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
+    memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
+
+    if (buf_size < 4)
+        return -1;
+
+    /* Frame header will be written at the end. */
+    buf      += 4;
+    buf_size -= 4;
+
+    write_headers = !(avctx->frame_number & (MAJOR_HEADER_INTERVAL - 1));
+
+    if (write_headers) {
+        if (buf_size < 28)
+            return -1;
+        write_major_sync(ctx, buf, buf_size);
+        buf      += 28;
+        buf_size -= 28;
+    }
+
+    buf1 = buf;
+
+    /* Substream headers will be written at the end. */
+    for (substr = 0; substr < ctx->num_substreams; substr++) {
+        buf      += 2;
+        buf_size -= 2;
+    }
+
+    buf2 = buf;
+
+    total_length = buf - buf0;
+
+    input_data(ctx, data, lossless_check_data);
+
+    for (channel = 0; channel < avctx->channels; channel++) {
+        for (filter = 0; filter < NUM_FILTERS; filter++)
+            set_filter_params(ctx, channel, filter, write_headers);
+        if (apply_filter(ctx, channel) < 0) {
+            /* Filter is horribly wrong.
+             * Clear filter params and update state. */
+            set_filter_params(ctx, channel, FIR, 1);
+            set_filter_params(ctx, channel, IIR, 1);
+            apply_filter(ctx, channel);
+        }
+    }
+
+    buf = write_substrs(ctx, buf, buf_size, write_headers, decoding_params,
+                        substream_data_len, lossless_check_data, channel_params);
 
     total_length += buf - buf2;
 
