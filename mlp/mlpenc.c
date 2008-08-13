@@ -98,27 +98,16 @@ typedef struct {
 
 static int mlp_sample_rate(int sample_rate)
 {
-    int sample_base = 48000;
-    uint8_t code = 0x0;
-
     switch (sample_rate) {
-    case 44100 << 0:
-    case 44100 << 1:
-    case 44100 << 2:
-        sample_base = 44100;
-        code = 0x8;
-    case 48000 << 0:
-    case 48000 << 1:
-    case 48000 << 2:
-        break;
+    case 44100 << 0: return 0x8 + 0;
+    case 44100 << 1: return 0x8 + 1;
+    case 44100 << 2: return 0x8 + 2;
+    case 48000 << 0: return 0x0 + 0;
+    case 48000 << 1: return 0x0 + 1;
+    case 48000 << 2: return 0x0 + 2;
     default:
         return -1;
     }
-
-    for (; sample_rate != sample_base; sample_rate >>= 1)
-        code++;
-
-    return code;
 }
 
 static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
