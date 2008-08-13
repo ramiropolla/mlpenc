@@ -877,6 +877,43 @@ static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
     return retval;
 }
 
+static void write_frame_headers(MLPEncodeContext *ctx, uint8_t *frame_header,
+                                uint8_t *substream_headers, unsigned int length,
+                                uint16_t substream_data_len[MAX_SUBSTREAMS])
+{
+    uint16_t access_unit_header = 0;
+    uint16_t parity_nibble = 0;
+    unsigned int substr;
+
+    parity_nibble  = ctx->timestamp;
+    parity_nibble ^= length;
+
+    for (substr = 0; substr < ctx->num_substreams; substr++) {
+        uint16_t substr_hdr = 0;
+
+        substr_hdr |= (0 << 15); /* extraword */
+        substr_hdr |= (0 << 14); /* ??? */
+        substr_hdr |= (1 << 13); /* checkdata */
+        substr_hdr |= (0 << 12); /* ??? */
+        substr_hdr |= (substream_data_len[substr] / 2) & 0x0FFF;
+
+        AV_WB16(substream_headers, substr_hdr);
+
+        parity_nibble ^= *substream_headers++;
+        parity_nibble ^= *substream_headers++;
+    }
+
+    parity_nibble ^= parity_nibble >> 8;
+    parity_nibble ^= parity_nibble >> 4;
+    parity_nibble &= 0xF;
+
+    access_unit_header |= (parity_nibble ^ 0xF) << 12;
+    access_unit_header |= length & 0xFFF;
+
+    AV_WB16(frame_header  , access_unit_header);
+    AV_WB16(frame_header+2, ctx->timestamp    );
+}
+
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                             void *data)
 {
@@ -886,9 +923,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     ChannelParams channel_params[MAX_CHANNELS];
     MLPEncodeContext *ctx = avctx->priv_data;
     uint8_t *buf2, *buf1, *buf0 = buf;
-    uint16_t access_unit_header = 0;
-    uint16_t parity_nibble = 0;
-    int length, total_length;
+    int total_length;
     unsigned int substr;
     int channel, filter;
     int write_headers;
@@ -1017,36 +1052,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     total_length += buf - buf2;
 
-    /* Write headers. */
-    length = total_length / 2;
-
-    parity_nibble  = ctx->timestamp;
-    parity_nibble ^= length;
-
-    for (substr = 0; substr < ctx->num_substreams; substr++) {
-        uint16_t substr_hdr = 0;
-
-        substr_hdr |= (0 << 15); /* extraword */
-        substr_hdr |= (0 << 14); /* ??? */
-        substr_hdr |= (1 << 13); /* checkdata */
-        substr_hdr |= (0 << 12); /* ??? */
-        substr_hdr |= (substream_data_len[substr] / 2) & 0x0FFF;
-
-        AV_WB16(buf1, substr_hdr);
-
-        parity_nibble ^= *buf1++;
-        parity_nibble ^= *buf1++;
-    }
-
-    parity_nibble ^= parity_nibble >> 8;
-    parity_nibble ^= parity_nibble >> 4;
-    parity_nibble &= 0xF;
-
-    access_unit_header |= (parity_nibble ^ 0xF) << 12;
-    access_unit_header |= length & 0xFFF;
-
-    AV_WB16(buf0  , access_unit_header);
-    AV_WB16(buf0+2, ctx->timestamp    );
+    write_frame_headers(ctx, buf0, buf1, total_length / 2, substream_data_len);
 
     ctx->timestamp += avctx->frame_size;
 
