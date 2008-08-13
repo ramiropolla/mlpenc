@@ -914,6 +914,23 @@ static void write_frame_headers(MLPEncodeContext *ctx, uint8_t *frame_header,
     AV_WB16(frame_header+2, ctx->timestamp    );
 }
 
+static void determine_filters(MLPEncodeContext *ctx, int write_headers)
+{
+    int channel, filter;
+
+    for (channel = 0; channel < ctx->avctx->channels; channel++) {
+        for (filter = 0; filter < NUM_FILTERS; filter++)
+            set_filter_params(ctx, channel, filter, write_headers);
+        if (apply_filter(ctx, channel) < 0) {
+            /* Filter is horribly wrong.
+             * Clear filter params and update state. */
+            set_filter_params(ctx, channel, FIR, 1);
+            set_filter_params(ctx, channel, IIR, 1);
+            apply_filter(ctx, channel);
+        }
+    }
+}
+
 static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
                              int write_headers,
                              DecodingParams decoding_params[MAX_SUBSTREAMS],
@@ -1007,7 +1024,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     uint8_t *buf2, *buf1, *buf0 = buf;
     int total_length;
     unsigned int substr;
-    int channel, filter;
     int write_headers;
 
     if (avctx->frame_size > MAX_BLOCKSIZE) {
@@ -1050,17 +1066,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     input_data(ctx, data, lossless_check_data);
 
-    for (channel = 0; channel < avctx->channels; channel++) {
-        for (filter = 0; filter < NUM_FILTERS; filter++)
-            set_filter_params(ctx, channel, filter, write_headers);
-        if (apply_filter(ctx, channel) < 0) {
-            /* Filter is horribly wrong.
-             * Clear filter params and update state. */
-            set_filter_params(ctx, channel, FIR, 1);
-            set_filter_params(ctx, channel, IIR, 1);
-            apply_filter(ctx, channel);
-        }
-    }
+    determine_filters(ctx, write_headers);
 
     buf = write_substrs(ctx, buf, buf_size, write_headers, decoding_params,
                         substream_data_len, lossless_check_data, channel_params);
