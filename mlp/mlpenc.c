@@ -23,22 +23,11 @@
 #include "bitstream.h"
 #include "libavutil/crc.h"
 #include "bytestream.h"
+#include "mlp.h"
 
 /* TODO add comments! */
 
 #define MAJOR_HEADER_INTERVAL 16
-
-#define MAX_CHANNELS        16
-#define MAX_SUBSTREAMS      2
-#define MAX_SAMPLERATE      192000
-#define MAX_BLOCKSIZE       (40 * (MAX_SAMPLERATE / 48000))
-#define MAX_BLOCKSIZE_POW2  (64 * (MAX_SAMPLERATE / 48000))
-
-#define MAX_FILTER_ORDER    8
-#define NUM_FILTERS         2
-
-#define FIR 0
-#define IIR 1
 
 typedef struct {
     uint8_t         min_channel;
@@ -75,24 +64,8 @@ typedef struct {
 
 } DecodingParams;
 
-typedef struct {
-    uint8_t         order;
-    uint8_t         shift;
-    int32_t         coeff[MAX_FILTER_ORDER];
-    int32_t         state[MAX_FILTER_ORDER];
-} FilterParams;
-
-typedef struct {
-    FilterParams    filter_params[NUM_FILTERS];
-
-    uint8_t         codebook;
-    uint8_t         huff_lsbs;
-
-    int16_t         huff_offset;
 #define HUFF_OFFSET_MIN    -16384
 #define HUFF_OFFSET_MAX     16383
-
-} ChannelParams;
 
 typedef struct {
     AVCodecContext *avctx;
@@ -123,8 +96,6 @@ typedef struct {
 #define BITS_20         0x1
 #define BITS_24         0x2
 
-#define MAX_SAMPLERATE  192000
-
 static int mlp_sample_rate(int sample_rate)
 {
     int sample_base = 48000;
@@ -148,65 +119,6 @@ static int mlp_sample_rate(int sample_rate)
         code++;
 
     return code;
-}
-
-/* TODO all these checksum functions and crc stuff can be shared between
- * encoder and decoder. */
-
-static AVCRC crc_1D[1024];
-static AVCRC crc_2D[1024];
-static AVCRC crc_63[1024];
-
-static uint16_t mlp_checksum16(const uint8_t *buf, unsigned int buf_size)
-{
-    uint16_t crc = av_crc(crc_2D, 0, buf, buf_size - 2);
-
-    crc ^= AV_RL16(buf + buf_size - 2);
-
-    return crc;
-}
-
-static uint8_t mlp_checksum8(const uint8_t *buf, unsigned int buf_size)
-{
-    uint8_t checksum = av_crc(crc_63, 0x3c, buf, buf_size - 1); // crc_63[0xa2] == 0x3c
-    checksum ^= buf[buf_size-1];
-    return checksum;
-}
-
-static uint8_t mlp_restart_checksum(const uint8_t *buf, unsigned int bit_size)
-{
-    int i;
-    int num_bytes = (bit_size + 2) / 8;
-
-    int crc = crc_1D[buf[0] & 0x3f];
-    crc = av_crc(crc_1D, crc, buf + 1, num_bytes - 2);
-    crc ^= buf[num_bytes - 1];
-
-    for (i = 0; i < ((bit_size + 2) & 7); i++) {
-        crc <<= 1;
-        if (crc & 0x100)
-            crc ^= 0x11D;
-        crc ^= (buf[num_bytes] >> (7 - i)) & 1;
-    }
-
-    return crc;
-}
-
-static uint8_t calculate_parity(const uint8_t *buf, unsigned int buf_size)
-{
-    uint32_t scratch = 0;
-    const uint8_t *buf_end = buf + buf_size;
-
-    for (; buf < buf_end - 3; buf += 4)
-        scratch ^= *((const uint32_t*)buf);
-
-    scratch ^= scratch >> 16;
-    scratch ^= scratch >> 8;
-
-    for (; buf < buf_end; buf++)
-        scratch ^= *buf;
-
-    return scratch;
 }
 
 static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
@@ -246,7 +158,7 @@ lucky 1054c0300008080001b538c
 
     flush_put_bits(&pb);
 
-    AV_WL16(buf+26, mlp_checksum16(buf, 26));
+    AV_WL16(buf+26, ff_mlp_checksum16(buf, 26));
 }
 
 static void write_restart_header(MLPEncodeContext *ctx,
@@ -282,7 +194,7 @@ static void write_restart_header(MLPEncodeContext *ctx,
     tmpb = *pb;
     flush_put_bits(&tmpb);
 
-    checksum = mlp_restart_checksum(pb->buf, put_bits_count(pb) - start_count);
+    checksum = ff_mlp_restart_checksum(pb->buf, put_bits_count(pb) - start_count);
 
     put_bits(pb,  8, checksum);
 }
@@ -321,9 +233,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     avctx->coded_frame              = avcodec_alloc_frame();
     avctx->coded_frame->key_frame   = 1;
 
-    av_crc_init(crc_1D, 0,  8,   0x1D, sizeof(crc_1D));
-    av_crc_init(crc_2D, 0, 16, 0x002D, sizeof(crc_2D));
-    av_crc_init(crc_63, 0,  8,   0x63, sizeof(crc_63));
+    ff_mlp_init_crc();
+    ff_mlp_init_crc2D(NULL);
 
     /* TODO mlp_channels is more complex, but for now
      * we only accept mono and stereo. */
@@ -660,22 +571,6 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
     return 0;
 }
 
-static const uint8_t huffman_tables[3][18][2] = {
-    {    /* huffman table 0, -7 - +10 */
-        {0x01, 9}, {0x01, 8}, {0x01, 7}, {0x01, 6}, {0x01, 5}, {0x01, 4}, {0x01, 3},
-        {0x04, 3}, {0x05, 3}, {0x06, 3}, {0x07, 3},
-        {0x03, 3}, {0x05, 4}, {0x09, 5}, {0x11, 6}, {0x21, 7}, {0x41, 8}, {0x81, 9},
-    }, { /* huffman table 1, -7 - +8 */
-        {0x01, 9}, {0x01, 8}, {0x01, 7}, {0x01, 6}, {0x01, 5}, {0x01, 4}, {0x01, 3},
-        {0x02, 2}, {0x03, 2},
-        {0x03, 3}, {0x05, 4}, {0x09, 5}, {0x11, 6}, {0x21, 7}, {0x41, 8}, {0x81, 9},
-    }, { /* huffman table 2, -7 - +7 */
-        {0x01, 9}, {0x01, 8}, {0x01, 7}, {0x01, 6}, {0x01, 5}, {0x01, 4}, {0x01, 3},
-        {0x01, 1},
-        {0x03, 3}, {0x05, 4}, {0x09, 5}, {0x11, 6}, {0x21, 7}, {0x41, 8}, {0x81, 9},
-    }
-};
-
 static int codebook_extremes[3][2] = {
     {-9, 8}, {-8, 7}, {-15, 14},
 };
@@ -780,7 +675,7 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int subs
 
         sample >>= lsb_bits;
 
-        bitcount += huffman_tables[codebook][sample + codebook_offset][1];
+        bitcount += ff_mlp_huffman_tables[codebook][sample + codebook_offset][1];
     }
 
     bo->offset   = offset;
@@ -919,8 +814,8 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 
             if (codebook[ch] >= 0) {
                 int8_t vlc = sample >> lsb_bits[ch];
-                put_bits(pb, huffman_tables[codebook[ch]][vlc][1],
-                             huffman_tables[codebook[ch]][vlc][0]);
+                put_bits(pb, ff_mlp_huffman_tables[codebook[ch]][vlc][1],
+                             ff_mlp_huffman_tables[codebook[ch]][vlc][0]);
             }
 
             put_sbits(pb, lsb_bits[ch], sample);
@@ -1122,8 +1017,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         tmpb = pb;
         flush_put_bits(&tmpb);
 
-        parity   = calculate_parity(buf, put_bits_count(&pb) >> 3) ^ 0xa9;
-        checksum = mlp_checksum8   (buf, put_bits_count(&pb) >> 3);
+        parity   = ff_mlp_calculate_parity(buf, put_bits_count(&pb) >> 3) ^ 0xa9;
+        checksum = ff_mlp_checksum8       (buf, put_bits_count(&pb) >> 3);
 
         put_bits(&pb, 8, parity  );
         put_bits(&pb, 8, checksum);
