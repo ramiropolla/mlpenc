@@ -22,7 +22,6 @@
 #include "avcodec.h"
 #include "bitstream.h"
 #include "libavutil/crc.h"
-#include "bytestream.h"
 #include "mlp.h"
 
 /* TODO add comments! */
@@ -433,6 +432,8 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
 static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
                                 int32_t *lossless_check_data, int is24)
 {
+    const int32_t *samples_32 = (const int32_t *) samples;
+    const int16_t *samples_16 = (const int16_t *) samples;
     unsigned int substr;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
@@ -446,8 +447,8 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
             for (channel = 0; channel <= rh->max_channel; channel++) {
                 int32_t sample;
 
-                if (is24) sample = (int32_t) bytestream_get_le32(&samples);
-                else      sample = (int16_t) bytestream_get_le16(&samples);
+                if (is24) sample = *samples_32++;
+                else      sample = *samples_16++;
 
                 sample <<= dp->quant_step_size[channel];
 
