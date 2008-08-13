@@ -24,31 +24,41 @@
 #include "libavutil/crc.h"
 #include "mlp.h"
 
-/* TODO add comments! */
-
 #define MAJOR_HEADER_INTERVAL 16
 
 typedef struct {
+    //! The index of the first channel coded in this substream.
     uint8_t         min_channel;
+    //! The index of the last channel coded in this substream.
     uint8_t         max_channel;
+    //! The number of channels input into the rematrix stage.
     uint8_t         max_matrix_channel;
 
+    //! The left shift applied to random noise in 0x31ea substreams.
     uint8_t         noise_shift;
+    //! The current seed value for the pseudorandom noise generator(s).
     uint32_t        noisegen_seed;
 
+    //! Set if the substream contains extra info to check the size of VLC blocks.
     int             data_check_present;
 
+    //! Running XOR of all output samples.
     int32_t         lossless_check_data;
 } RestartHeader;
 
 typedef struct {
+    //! number of PCM samples in current audio block
     uint16_t        blocksize;
+    //! Left shift to apply to Huffman-decoded residuals.
     uint8_t         quant_step_size[MAX_CHANNELS];
 
+    //! Number of matrices to be applied.
     uint8_t         num_primitive_matrices;
 
+    //! Left shift to apply to decoded PCM values to get final 24-bit output.
     int8_t          output_shift[MAX_CHANNELS];
 
+    //! Bitmask of which parameter sets are conveyed in a decoding parameter block.
     uint8_t         param_presence_flags;
 #define PARAM_PRESENCE_FLAGS    (1 << 8)
 
@@ -69,16 +79,17 @@ typedef struct {
 typedef struct {
     AVCodecContext *avctx;
 
+    //! Number of substreams contained within this stream.
     int             num_substreams;
 
-    int             sample_fmt;
-    int             sample_rate;
+    int             sample_fmt;     ///< Sample format encoded for MLP
+    int             sample_rate;    ///< Sample rate encoded for MLP
 
     int32_t         sample_buffer[MAX_BLOCKSIZE][MAX_CHANNELS+2];
 
     uint16_t        timestamp;
 
-    uint8_t         mlp_channels;
+    uint8_t         mlp_channels;   ///< Channel arrangement for MLP streams
 
     ChannelParams   channel_params[MAX_CHANNELS];
 
