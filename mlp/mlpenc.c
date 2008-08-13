@@ -240,18 +240,12 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         rh->max_channel        = avctx->channels - 1;
         rh->max_matrix_channel = 1;
 
-        rh->noise_shift        = 0;
-        rh->noisegen_seed      = 0;
-
-        rh->data_check_present = 0;
-
         dp->blocksize          = avctx->frame_size;
 
         for (channel = 0; channel <= rh->max_channel; channel++) {
             ChannelParams *cp = &ctx->channel_params[channel];
 
             dp->quant_step_size[channel] = quant_step_size;
-            cp->codebook                 =  0;
             cp->huff_lsbs                = 24;
         }
 
