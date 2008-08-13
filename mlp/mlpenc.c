@@ -326,6 +326,7 @@ static void write_filter_params(MLPEncodeContext *ctx, PutBitContext *pb,
             put_sbits(pb, coeff_bits, fp->coeff[i] >> coeff_shift);
         }
 
+        /* TODO state data for IIR filter. */
         put_bits(pb, 1, 0);
     }
 }
