@@ -500,9 +500,9 @@ static void set_filter_params(MLPEncodeContext *ctx,
 /* TODO What substream to use for applying filters to channel? */
 static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
 {
-    int32_t filter_state_buffer[NUM_FILTERS][MAX_BLOCKSIZE + MAX_FILTER_ORDER];
     FilterParams *fp[NUM_FILTERS] = { &ctx->channel_params[channel].filter_params[FIR],
                                       &ctx->channel_params[channel].filter_params[IIR], };
+    int32_t filter_state_buffer[NUM_FILTERS][MAX_BLOCKSIZE + MAX_FILTER_ORDER];
     int32_t mask = MSB_MASK(ctx->decoding_params[0].quant_step_size[channel]);
     unsigned int filter_shift = fp[FIR]->shift;
     int index = MAX_BLOCKSIZE;
@@ -616,9 +616,9 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int subs
                                  int32_t min, int32_t max, int16_t offset,
                                  BestOffset *bo, int *pnext, int up)
 {
-    DecodingParams *dp = &ctx->decoding_params[substr];
     int32_t codebook_min = codebook_extremes[codebook][0];
     int32_t codebook_max = codebook_extremes[codebook][1];
+    DecodingParams *dp = &ctx->decoding_params[substr];
     int codebook_offset  = 7 + (2 - codebook);
     int32_t unsign_offset = offset;
     int lsb_bits = 0, bitcount = 0;
@@ -674,10 +674,10 @@ static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                           int average, int32_t min, int32_t max,
                           BestOffset *bo, int direction)
 {
+    int offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
     int previous_count = INT_MAX;
     int offset_min, offset_max;
     int is_greater = 0;
-    int offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
     int next;
 
     offset_min = FFMAX(min, HUFF_OFFSET_MIN);
@@ -687,8 +687,8 @@ static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
         BestOffset temp_bo;
 
         codebook_bits_offset(ctx, substr, channel, codebook,
-                                min, max, offset,
-                                &temp_bo, &next, direction);
+                             min, max, offset,
+                             &temp_bo, &next, direction);
 
         if (temp_bo.bitcount < previous_count) {
             if (temp_bo.bitcount < bo->bitcount)
@@ -722,8 +722,8 @@ static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
         ChannelParams *cp = &ctx->channel_params[channel];
         int32_t min = INT32_MAX, max = INT32_MIN;
         int best_codebook = 0;
-        BestOffset bo;
         int average = 0;
+        BestOffset bo;
         int i;
 
         /* Determine extremes and average. */
@@ -765,17 +765,17 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
-    int codebook[MAX_CHANNELS];
     int32_t sign_huff_offset[MAX_CHANNELS];
-    int lsb_bits[MAX_CHANNELS];
+    int codebook            [MAX_CHANNELS];
+    int lsb_bits            [MAX_CHANNELS];
     unsigned int i, ch;
 
     for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
         ChannelParams *cp = &ctx->channel_params[ch];
         int sign_shift;
 
-        lsb_bits       [ch] = cp->huff_lsbs - dp->quant_step_size[ch];
-        codebook       [ch] = cp->codebook  - 1;
+        lsb_bits        [ch] = cp->huff_lsbs - dp->quant_step_size[ch];
+        codebook        [ch] = cp->codebook  - 1;
         sign_huff_offset[ch] = cp->huff_offset;
 
         sign_shift = lsb_bits[ch] - 1;
@@ -853,12 +853,12 @@ static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
             retval |= PARAM_QUANTSTEP;
 
     for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
-        ChannelParams *prev_cp = &channel_params[ch];
-        FilterParams *prev_fir = &prev_cp->filter_params[FIR];
-        FilterParams *prev_iir = &prev_cp->filter_params[IIR];
-        ChannelParams *cp = &ctx->channel_params[ch];
-        FilterParams *fir = &cp->filter_params[FIR];
-        FilterParams *iir = &cp->filter_params[IIR];
+        ChannelParams *prev_cp  = &channel_params[ch];
+        FilterParams  *prev_fir = &prev_cp->filter_params[FIR];
+        FilterParams  *prev_iir = &prev_cp->filter_params[IIR];
+        ChannelParams *cp  = &ctx->channel_params[ch];
+        FilterParams  *fir = &cp->filter_params[FIR];
+        FilterParams  *iir = &cp->filter_params[IIR];
 
         if (compare_filter_params(prev_fir, fir))
             retval |= PARAM_FIR;
@@ -880,10 +880,10 @@ static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                             void *data)
 {
-    ChannelParams channel_params[MAX_CHANNELS];
     DecodingParams decoding_params[MAX_SUBSTREAMS];
     uint16_t substream_data_len[MAX_SUBSTREAMS];
     int32_t lossless_check_data[MAX_SUBSTREAMS];
+    ChannelParams channel_params[MAX_CHANNELS];
     MLPEncodeContext *ctx = avctx->priv_data;
     uint8_t *buf2, *buf1, *buf0 = buf;
     uint16_t access_unit_header = 0;
