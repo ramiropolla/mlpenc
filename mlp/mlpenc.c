@@ -476,6 +476,7 @@ static void set_filter_params(MLPEncodeContext *ctx,
 {
     FilterParams *fp = &ctx->channel_params[channel].filter_params[filter];
 
+    /* Restart frames must not depend on filter state from previous frames. */
     if (write_headers) {
         fp->order    =  0;
         return;
