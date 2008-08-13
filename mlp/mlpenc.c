@@ -888,7 +888,7 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
     RestartHeader  *rh = &ctx->restart_header [substr];
     int codebook_offset[MAX_CHANNELS];
     int codebook[MAX_CHANNELS];
-    int32_t offset[MAX_CHANNELS];
+    int32_t sign_huff_offset[MAX_CHANNELS];
     int lsb_bits[MAX_CHANNELS];
     unsigned int i, ch;
 
@@ -897,19 +897,19 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 
         lsb_bits       [ch] = cp->huff_lsbs - dp->quant_step_size[ch];
         codebook       [ch] = cp->codebook  - 1;
-        offset         [ch] = cp->huff_offset;
+        sign_huff_offset[ch] = cp->huff_offset;
         codebook_offset[ch] = 7 + (2 - codebook[ch]);
 
         /* Unsign if needed. */
         if (codebook[ch] == -1 || codebook[ch] == 2)
-            offset[ch] -= 1 << (lsb_bits[ch] - 1);
+            sign_huff_offset[ch] -= 1 << (lsb_bits[ch] - 1);
     }
 
     for (i = 0; i < dp->blocksize; i++) {
         for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
             int32_t sample = ctx->sample_buffer[i][ch] >> dp->quant_step_size[ch];
 
-            sample -= offset[ch];
+            sample -= sign_huff_offset[ch];
 
             if (codebook[ch] >= 0) {
                 int8_t vlc = (sample >> lsb_bits[ch]) + codebook_offset[ch];
