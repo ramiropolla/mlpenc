@@ -894,15 +894,18 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 
     for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
         ChannelParams *cp = &ctx->channel_params[ch];
+        int sign_shift;
 
         lsb_bits       [ch] = cp->huff_lsbs - dp->quant_step_size[ch];
         codebook       [ch] = cp->codebook  - 1;
         sign_huff_offset[ch] = cp->huff_offset;
         codebook_offset[ch] = 7 + (2 - codebook[ch]);
 
+        sign_shift = lsb_bits[ch] - 1;
+
         /* Unsign if needed. */
         if (codebook[ch] == -1 || codebook[ch] == 2)
-            sign_huff_offset[ch] -= 1 << (lsb_bits[ch] - 1);
+            sign_huff_offset[ch] -= 1 << sign_shift;
     }
 
     for (i = 0; i < dp->blocksize; i++) {
