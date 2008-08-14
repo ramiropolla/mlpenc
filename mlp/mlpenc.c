@@ -91,6 +91,10 @@ typedef struct {
 
     uint8_t         mlp_channels;   ///< Channel arrangement for MLP streams
 
+    uint8_t         mlp_channels2;  ///< 1 bit for each channel
+    uint8_t         mlp_channels3;  /**< TODO unknown channel-related field
+                                     *   These values are right for mono and stereo */
+
     ChannelParams   channel_params[MAX_CHANNELS];
 
     DecodingParams  decoding_params[MAX_SUBSTREAMS];
@@ -150,16 +154,12 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
                            * a little bit less. */
     put_bits(&pb,  4, 1); /* TODO Support more num_substreams. */
 
-    /* TODO copied from luckynight.mlp, 440hz.mlp. */
-#if 0
-god   20d763f0000808000004536
-440hz
-lucky 1054c0300008080001b538c
-#endif
-    put_bits(&pb,  4, 0x1       );
-    put_bits(&pb, 32, 0x054c0300);
-    put_bits(&pb, 32, 0x00808000);
-    put_bits(&pb,  8, 0x1b      );
+    put_bits(&pb,  4, 0x1       ); /* TODO These values have something */
+    put_bits(&pb, 16, 0x054c    ); /* to do with the sample rate       */
+    put_bits(&pb,  8, ctx->mlp_channels2);
+    put_bits(&pb, 32, 0x00008080); /* These values seem */
+    put_bits(&pb,  8, 0x00      ); /* to be constants   */
+    put_bits(&pb,  8, ctx->mlp_channels3); /* TODO Finish understanding this field. */
 
     flush_put_bits(&pb);
 
@@ -208,6 +208,18 @@ static void write_restart_header(MLPEncodeContext *ctx,
     put_bits(pb,  8, checksum);
 }
 
+/** Encodes the third type of channel information for the sync headers. */
+static uint8_t code_channels3(int channels)
+{
+    switch (channels) {
+    case 1: return 0x1f;
+    case 2: return 0x1b;
+    case 6: return 0x00;
+    default:
+        return 0x1b;
+    }
+}
+
 static av_cold int mlp_encode_init(AVCodecContext *avctx)
 {
     MLPEncodeContext *ctx = avctx->priv_data;
@@ -251,6 +263,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     /* TODO mlp_channels is more complex, but for now
      * we only accept mono and stereo. */
     ctx->mlp_channels   = avctx->channels - 1;
+    ctx->mlp_channels2  = (1 << avctx->channels) - 1;
+    ctx->mlp_channels3  = code_channels3(avctx->channels);
     ctx->num_substreams = 1;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
