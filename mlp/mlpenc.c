@@ -155,10 +155,10 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
                            * a little bit less. */
     put_bits(&pb,  4, 1); /* TODO Support more num_substreams. */
 
-    put_bits(&pb,  4, 0x1       ); /* TODO These values have something to */
-    put_bits(&pb, 16, 0x054c    ); /* do with the sample rate. The ones   */
-                                   /* used here come from samples that    */
-                                   /* are stereo and have 44100Hz.        */
+    put_bits(&pb, 20, 0x1054c); /* TODO These values have something to do with
+                                 * the sample rate. The ones used here come
+                                 * from samples that are stereo and have
+                                 * 44100Hz. */
     put_bits(&pb,  8, ctx->mlp_channels2);
     put_bits(&pb, 32, 0x00008080); /* These values seem */
     put_bits(&pb,  8, 0x00      ); /* to be constants   */
