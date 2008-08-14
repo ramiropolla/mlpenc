@@ -1085,7 +1085,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
         if (last_block) {
             /* TODO find a sample and implement shorten_by. */
-            put_bits(&pb, 32, 0xd234d234);
+            put_bits(&pb, 32, END_OF_STREAM);
         }
 
         /* data must be flushed for the checksum and parity to be right. */
