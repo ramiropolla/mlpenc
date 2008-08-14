@@ -138,13 +138,13 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
     put_bits(&pb,  5, ctx->mlp_channels);
 
     /* TODO copied from luckynight.mlp, 440hz.mlp and god.mlp. */
-    put_bits(&pb, 16, 0xb752           );
-    put_bits(&pb, 16, 0x4000           );
-    put_bits(&pb, 16, 0                );
+    put_bits(&pb, 16, 0xb752);
+    put_bits(&pb, 16, 0x4000);
+    put_bits(&pb, 16, 0x0000);
 
-    put_bits(&pb,  1, 1                ); /* TODO is_vbr */
-    put_bits(&pb, 15, 0                ); /* TODO peak_bitrate */
-    put_bits(&pb,  4, 1                ); /* TODO num_substreams */
+    put_bits(&pb,  1, 1); /* TODO is_vbr */
+    put_bits(&pb, 15, 0); /* TODO peak_bitrate */
+    put_bits(&pb,  4, 1); /* TODO num_substreams */
 
     /* TODO copied from luckynight.mlp, 440hz.mlp. */
 #if 0
@@ -152,10 +152,10 @@ god   20d763f0000808000004536
 440hz
 lucky 1054c0300008080001b538c
 #endif
-    put_bits(&pb,  4, 0x1              );
-    put_bits(&pb, 32, 0x054c0300       );
-    put_bits(&pb, 32, 0x00808000       );
-    put_bits(&pb,  8, 0x1b             );
+    put_bits(&pb,  4, 0x1       );
+    put_bits(&pb, 32, 0x054c0300);
+    put_bits(&pb, 32, 0x00808000);
+    put_bits(&pb,  8, 0x1b      );
 
     flush_put_bits(&pb);
 
