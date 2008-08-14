@@ -931,22 +931,28 @@ static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
         retval |= PARAM_MATRIX;
 
     for (ch = 0; ch <= rh->max_matrix_channel; ch++)
-        if (prev->output_shift[ch] != dp->output_shift[ch])
+        if (prev->output_shift[ch] != dp->output_shift[ch]) {
             retval |= PARAM_OUTSHIFT;
+            break;
+        }
 
     for (ch = 0; ch <= rh->max_channel; ch++)
-        if (prev->quant_step_size[ch] != dp->quant_step_size[ch])
+        if (prev->quant_step_size[ch] != dp->quant_step_size[ch]) {
             retval |= PARAM_QUANTSTEP;
+            break;
+        }
 
     for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
         ChannelParams *prev_cp = &channel_params[ch];
         ChannelParams *cp = &ctx->channel_params[ch];
 
-        if (compare_filter_params(&prev_cp->filter_params[FIR],
+        if (!(retval & PARAM_FIR) &&
+            compare_filter_params(&prev_cp->filter_params[FIR],
                                   &     cp->filter_params[FIR]))
             retval |= PARAM_FIR;
 
-        if (compare_filter_params(&prev_cp->filter_params[IIR],
+        if (!(retval & PARAM_IIR) &&
+            compare_filter_params(&prev_cp->filter_params[IIR],
                                   &     cp->filter_params[IIR]))
             retval |= PARAM_IIR;
 
