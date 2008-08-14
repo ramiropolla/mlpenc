@@ -944,16 +944,14 @@ static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
 
     for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
         ChannelParams *prev_cp  = &channel_params[ch];
-        FilterParams  *prev_fir = &prev_cp->filter_params[FIR];
-        FilterParams  *prev_iir = &prev_cp->filter_params[IIR];
         ChannelParams *cp  = &ctx->channel_params[ch];
-        FilterParams  *fir = &cp->filter_params[FIR];
-        FilterParams  *iir = &cp->filter_params[IIR];
 
-        if (compare_filter_params(prev_fir, fir))
+        if (compare_filter_params(&prev_cp->filter_params[FIR],
+                                  &     cp->filter_params[FIR]))
             retval |= PARAM_FIR;
 
-        if (compare_filter_params(prev_iir, iir))
+        if (compare_filter_params(&prev_cp->filter_params[IIR],
+                                  &     cp->filter_params[IIR]))
             retval |= PARAM_IIR;
 
         if (prev_cp->huff_offset != cp->huff_offset)
