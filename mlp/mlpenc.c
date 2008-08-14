@@ -174,15 +174,11 @@ static void write_restart_header(MLPEncodeContext *ctx,
                                  PutBitContext *pb, int substr)
 {
     RestartHeader *rh = &ctx->restart_header[substr];
-    int32_t lossless_check = rh->lossless_check_data;
+    int32_t lossless_check = xor_32_to_8(rh->lossless_check_data);
     unsigned int start_count = put_bits_count(pb);
     PutBitContext tmpb;
     uint8_t checksum;
     unsigned int ch;
-
-    lossless_check ^= lossless_check >> 16;
-    lossless_check ^= lossless_check >>  8;
-    lossless_check &= 0xFF;
 
     put_bits(pb, 14, 0x31ea                ); /* TODO 0x31eb */
     put_bits(pb, 16, 0                     ); /* TODO I don't know what this is. Ask Ian. */
