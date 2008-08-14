@@ -824,9 +824,9 @@ static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
             BestOffset temp_bo = { 0, INT_MAX, 0, };
 
             codebook_bits(ctx, substr, channel, i - 1, average,
-                            min, max, &temp_bo, 0);
+                          min, max, &temp_bo, 0);
             codebook_bits(ctx, substr, channel, i - 1, average,
-                            min, max, &temp_bo, 1);
+                          min, max, &temp_bo, 1);
 
             if (temp_bo.bitcount < bo.bitcount) {
                 bo = temp_bo;
@@ -943,8 +943,8 @@ static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
             retval |= PARAM_QUANTSTEP;
 
     for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
-        ChannelParams *prev_cp  = &channel_params[ch];
-        ChannelParams *cp  = &ctx->channel_params[ch];
+        ChannelParams *prev_cp = &channel_params[ch];
+        ChannelParams *cp = &ctx->channel_params[ch];
 
         if (compare_filter_params(&prev_cp->filter_params[FIR],
                                   &     cp->filter_params[FIR]))
