@@ -137,7 +137,7 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
     put_bits(&pb, 11, 0                );
     put_bits(&pb,  5, ctx->mlp_channels);
 
-    /* TODO copied from luckynight.mlp, 440hz.mlp and god.mlp. */
+    /* These values seem to be constant for all MLP samples tested. */
     put_bits(&pb, 16, 0xb752);
     put_bits(&pb, 16, 0x4000);
     put_bits(&pb, 16, 0x0000);
