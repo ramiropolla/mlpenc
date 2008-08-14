@@ -299,7 +299,7 @@ static int inline number_sbits(int number)
 
 /** Determines the smallest number of bits needed to encode the filter
  *  coefficients, and if it's possible to right-shift their values without
- *  loosing any precision.
+ *  losing any precision.
  */
 static void code_filter_coeffs(MLPEncodeContext *ctx,
                                unsigned int channel, unsigned int filter,
