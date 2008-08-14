@@ -214,7 +214,9 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 
     ctx->sample_rate = mlp_sample_rate(avctx->sample_rate);
     if (ctx->sample_rate < 0) {
-        av_log(avctx, AV_LOG_ERROR, "Unsupported sample_rate.\n");
+        av_log(avctx, AV_LOG_ERROR, "Unsupported sample rate %d. Supported "
+                            "sample rates are 44100, 88200, 176400, 48000, "
+                            "96000, and 192000.\n", avctx->sample_rate);
         return -1;
     }
 
@@ -230,7 +232,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     /* TODO 20 bits: */
     case SAMPLE_FMT_S24: ctx->sample_fmt = BITS_24; quant_step_size = 0; break;
     default:
-        av_log(avctx, AV_LOG_ERROR, "Sample format not supported.\n");
+        av_log(avctx, AV_LOG_ERROR, "Sample format not supported. "
+               "Only 16- and 24-bit samples are supported.\n");
         return -1;
     }
 
