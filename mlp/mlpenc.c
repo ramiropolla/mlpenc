@@ -330,7 +330,7 @@ static void code_filter_coeffs(MLPEncodeContext *ctx,
 
         if (coeff < min)
             min = coeff;
-        if (fp->coeff[order] > max)
+        if (coeff > max)
             max = coeff;
 
         or |= coeff;
