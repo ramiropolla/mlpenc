@@ -138,7 +138,8 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
     put_bits(&pb,  4, ctx->sample_fmt  );
     put_bits(&pb,  4, ctx->sample_rate );
     put_bits(&pb,  4, ctx->sample_rate );
-    put_bits(&pb, 11, 0                );
+    put_bits(&pb, 11, 0                ); /* This value is 0 in all MLP
+                                           * samples tested. */
     put_bits(&pb,  5, ctx->mlp_channels);
 
     /* These values seem to be constant for all MLP samples tested. */
