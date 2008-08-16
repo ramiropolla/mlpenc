@@ -1,6 +1,6 @@
 Index: libavformat/Makefile
 ===================================================================
---- libavformat/Makefile	(revision 14733)
+--- libavformat/Makefile	(revision 14793)
 +++ libavformat/Makefile	(working copy)
 @@ -81,6 +81,7 @@
  OBJS-$(CONFIG_MJPEG_DEMUXER)             += raw.o
@@ -12,13 +12,13 @@ Index: libavformat/Makefile
  OBJS-$(CONFIG_MMF_MUXER)                 += mmf.o riff.o
 Index: libavformat/raw.c
 ===================================================================
---- libavformat/raw.c	(revision 14733)
+--- libavformat/raw.c	(revision 14793)
 +++ libavformat/raw.c	(working copy)
-@@ -596,6 +596,21 @@
+@@ -849,6 +849,21 @@
  };
  #endif
  
-+#ifdef CONFIG_MUXERS
++#ifdef CONFIG_MLP_MUXER
 +AVOutputFormat mlp_muxer = {
 +    "mlp",
 +    NULL_IF_CONFIG_SMALL("raw MLP"),
@@ -31,14 +31,14 @@ Index: libavformat/raw.c
 +    raw_write_packet,
 +    .flags= AVFMT_NOTIMESTAMPS,
 +};
-+#endif //CONFIG_MUXERS
++#endif
 +
- AVInputFormat flac_demuxer = {
-     "flac",
-     NULL_IF_CONFIG_SMALL("raw FLAC"),
+ #ifdef CONFIG_MPEG1VIDEO_MUXER
+ AVOutputFormat mpeg1video_muxer = {
+     "mpeg1video",
 Index: libavformat/allformats.c
 ===================================================================
---- libavformat/allformats.c	(revision 14733)
+--- libavformat/allformats.c	(revision 14793)
 +++ libavformat/allformats.c	(working copy)
 @@ -100,7 +100,7 @@
      REGISTER_MUXDEMUX (MATROSKA, matroska);
