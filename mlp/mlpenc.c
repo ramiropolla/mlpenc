@@ -1178,7 +1178,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     uint8_t *buf2, *buf1, *buf0 = buf;
     int total_length = 0;
     unsigned int substr;
-    uint8_t *data0 = data;
     int restart_frame;
 
     ctx->frame_index = avctx->frame_number % ctx->major_header_interval;
@@ -1191,7 +1190,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     }
 
     if (avctx->frame_number < ctx->major_header_interval) {
-        if (data0) {
+        if (data) {
             goto input_and_return;
         } else {
             /* There are less frames than the requested major header interval.
@@ -1259,7 +1258,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
 input_and_return:
 
-    if (data0) {
+    if (data) {
         ctx->frame_size[ctx->frame_index] = avctx->frame_size;
         ctx->frame_number[ctx->frame_index] = avctx->frame_number;
         input_data(ctx, data);
