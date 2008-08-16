@@ -89,6 +89,8 @@ typedef struct {
     uint8_t        *big_sample_buffer;
     uint8_t        *last_frame;
 
+    int32_t        *lossless_check_data;
+
     unsigned int    frame_size[MAJOR_HEADER_INTERVAL];
     unsigned int    frame_number[MAJOR_HEADER_INTERVAL];
     unsigned int    frame_index;
@@ -233,6 +235,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 {
     MLPEncodeContext *ctx = avctx->priv_data;
     unsigned int sample_size, big_sample_buffer_size;
+    unsigned int lossless_check_data_size;
     unsigned int quant_step_size;
     unsigned int substr;
 
@@ -290,6 +293,13 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     ctx->mlp_channels2  = (1 << avctx->channels) - 1;
     ctx->mlp_channels3  = code_channels3(avctx->channels);
     ctx->num_substreams = 1;
+
+    lossless_check_data_size = sizeof(int32_t) * ctx->num_substreams
+                             * ctx->major_header_interval;
+
+    ctx->lossless_check_data = av_malloc(lossless_check_data_size);
+    if (!ctx->lossless_check_data)
+        return -1;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams *dp = &ctx->decoding_params[substr];
@@ -505,11 +515,14 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
  *  lossless_check_data that will be written to the restart header.
  */
 static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
-                                int32_t *lossless_check_data, int is24)
+                                int is24)
 {
+    int32_t *lossless_check_data = ctx->lossless_check_data;
     const int32_t *samples_32 = (const int32_t *) samples;
     const int16_t *samples_16 = (const int16_t *) samples;
     unsigned int substr;
+
+    lossless_check_data += ctx->frame_index * ctx->num_substreams;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams *dp = &ctx->decoding_params[substr];
@@ -532,18 +545,17 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
             }
         }
 
-        lossless_check_data[substr] = temp_lossless_check_data;
+        *lossless_check_data++ = temp_lossless_check_data;
     }
 }
 
 /** Wrapper function for inputting data in two different bit-depths. */
-static void input_data(MLPEncodeContext *ctx, void *samples,
-                       int32_t *lossless_check_data)
+static void input_data(MLPEncodeContext *ctx, void *samples)
 {
     if (ctx->avctx->sample_fmt == SAMPLE_FMT_S24)
-        input_data_internal(ctx, samples, lossless_check_data, 1);
+        input_data_internal(ctx, samples, 1);
     else
-        input_data_internal(ctx, samples, lossless_check_data, 0);
+        input_data_internal(ctx, samples, 0);
 }
 
 /** Determines the best filter parameters for the given data and writes the
@@ -1057,11 +1069,13 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
                              int restart_frame,
                              DecodingParams decoding_params[MAX_SUBSTREAMS],
                              uint16_t substream_data_len[MAX_SUBSTREAMS],
-                             int32_t lossless_check_data[MAX_SUBSTREAMS],
                              ChannelParams channel_params[MAX_CHANNELS])
 {
+    int32_t *lossless_check_data = ctx->lossless_check_data;
     unsigned int substr;
     int end = 0;
+
+    lossless_check_data += ctx->frame_index * ctx->num_substreams;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams *dp = &ctx->decoding_params[substr];
@@ -1101,7 +1115,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
             put_bits(&pb, 1, 0);
         }
 
-        rh->lossless_check_data ^= lossless_check_data[substr];
+        rh->lossless_check_data ^= *lossless_check_data++;
 
         write_block_data(ctx, &pb, substr);
 
@@ -1140,7 +1154,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 {
     DecodingParams decoding_params[MAX_SUBSTREAMS];
     uint16_t substream_data_len[MAX_SUBSTREAMS];
-    int32_t lossless_check_data[MAX_SUBSTREAMS];
     ChannelParams channel_params[MAX_CHANNELS];
     MLPEncodeContext *ctx = avctx->priv_data;
     uint8_t *buf2, *buf1, *buf0 = buf;
@@ -1213,12 +1226,12 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     total_length = buf - buf0;
 
-    input_data(ctx, data, lossless_check_data);
+    input_data(ctx, data);
 
     determine_filters(ctx, restart_frame);
 
     buf = write_substrs(ctx, buf, buf_size, restart_frame, decoding_params,
-                        substream_data_len, lossless_check_data, channel_params);
+                        substream_data_len, channel_params);
 
     total_length += buf - buf2;
 
@@ -1243,6 +1256,7 @@ static av_cold int mlp_encode_close(AVCodecContext *avctx)
 {
     MLPEncodeContext *ctx = avctx->priv_data;
 
+    av_freep(&ctx->lossless_check_data);
     av_freep(&ctx->big_sample_buffer);
     av_freep(&avctx->coded_frame);
 
