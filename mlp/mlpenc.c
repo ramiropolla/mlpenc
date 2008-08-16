@@ -540,7 +540,7 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
             for (channel = 0; channel <= rh->max_channel; channel++) {
                 int32_t sample;
 
-                if (is24) sample = *samples_32++;
+                if (is24) sample = *samples_32++ >> 8;
                 else      sample = *samples_16++;
 
                 sample <<= dp->quant_step_size[channel];
