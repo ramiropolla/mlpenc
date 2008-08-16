@@ -1192,7 +1192,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     if (avctx->frame_number < ctx->major_header_interval) {
         if (data0) {
-            goto buffer_and_return;
+            goto input_and_return;
         } else {
             /* There are less frames than the requested major header interval.
              * Update the context and *data to reflect this.
@@ -1257,7 +1257,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     ctx->timestamp += ctx->frame_size[ctx->frame_index];
 
-buffer_and_return:
+input_and_return:
 
     if (data0) {
         ctx->frame_size[ctx->frame_index] = avctx->frame_size;
