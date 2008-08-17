@@ -362,14 +362,13 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         rh->max_matrix_channel = 1;
 
         for (channel = 0; channel <= rh->max_channel; channel++) {
-            ChannelParams *cp = &ctx->channel_params[channel];
-
             dp->quant_step_size[channel] = quant_step_size;
-            cp->huff_lsbs                = 24;
         }
 
         dp->param_presence_flags = default_param_presence_flags();
     }
+
+    clear_channel_params(ctx->channel_params);
 
     return 0;
 }
