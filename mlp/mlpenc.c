@@ -1105,6 +1105,8 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
         int params_changed;
         int last_block = 0;
 
+        init_put_bits(&pb, buf, buf_size);
+
         if (ctx->frame_size[ctx->frame_index] < dp->blocksize) {
             dp->blocksize = ctx->frame_size[ctx->frame_index];
             last_block = 1;
@@ -1115,8 +1117,6 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
         params_changed = decoding_params_diff(ctx, &decoding_params[substr],
                                               channel_params,
                                               substr);
-
-        init_put_bits(&pb, buf, buf_size);
 
         if (restart_frame || params_changed) {
             put_bits(&pb, 1, 1);
