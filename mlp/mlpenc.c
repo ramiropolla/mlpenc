@@ -626,7 +626,7 @@ static void input_data(MLPEncodeContext *ctx, void *samples)
 
 /** Determines the best filter parameters for the given data and writes the
  *  necessary information to the context.
- *  TODO Add actual filter predictors!
+ *  TODO Add IIR filter predictor!
  */
 static void set_filter_params(MLPEncodeContext *ctx,
                               unsigned int channel, unsigned int filter,
