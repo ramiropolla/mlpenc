@@ -234,6 +234,38 @@ static uint8_t code_channels3(int channels)
     }
 }
 
+static void clear_decoding_params(DecodingParams decoding_params[MAX_SUBSTREAMS])
+{
+    unsigned int substr;
+
+    for (substr = 0; substr < MAX_SUBSTREAMS; substr++) {
+        DecodingParams *dp = &decoding_params[substr];
+
+        dp->param_presence_flags   = 0xff;
+        dp->num_primitive_matrices = 0;
+        dp->blocksize              = 8;
+
+        memset(dp->output_shift   , 0, sizeof(dp->output_shift   ));
+        memset(dp->quant_step_size, 0, sizeof(dp->quant_step_size));
+    }
+}
+
+static void clear_channel_params(ChannelParams channel_params[MAX_CHANNELS])
+{
+    unsigned int channel;
+
+    for (channel = 0; channel < MAX_CHANNELS; channel++) {
+        ChannelParams *cp = &channel_params[channel];
+
+        memset(&cp->filter_params, 0, sizeof(cp->filter_params));
+
+        /* Default audio coding is 24-bit raw PCM. */
+        cp->huff_offset      =  0;
+        cp->codebook         =  0;
+        cp->huff_lsbs        = 24;
+    }
+}
+
 static av_cold int mlp_encode_init(AVCodecContext *avctx)
 {
     MLPEncodeContext *ctx = avctx->priv_data;
@@ -1195,38 +1227,6 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
     }
 
     return buf;
-}
-
-static void clear_decoding_params(DecodingParams decoding_params[MAX_SUBSTREAMS])
-{
-    unsigned int substr;
-
-    for (substr = 0; substr < MAX_SUBSTREAMS; substr++) {
-        DecodingParams *dp = &decoding_params[substr];
-
-        dp->param_presence_flags   = 0xff;
-        dp->num_primitive_matrices = 0;
-        dp->blocksize              = 8;
-
-        memset(dp->output_shift   , 0, sizeof(dp->output_shift   ));
-        memset(dp->quant_step_size, 0, sizeof(dp->quant_step_size));
-    }
-}
-
-static void clear_channel_params(ChannelParams channel_params[MAX_CHANNELS])
-{
-    unsigned int channel;
-
-    for (channel = 0; channel < MAX_CHANNELS; channel++) {
-        ChannelParams *cp = &channel_params[channel];
-
-        memset(&cp->filter_params, 0, sizeof(cp->filter_params));
-
-        /* Default audio coding is 24-bit raw PCM. */
-        cp->huff_offset      =  0;
-        cp->codebook         =  0;
-        cp->huff_lsbs        = 24;
-    }
 }
 
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
