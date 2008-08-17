@@ -94,6 +94,7 @@ typedef struct {
 
     int32_t        *lossless_check_data;
 
+    uint8_t         quant_step_size; ///< TODO This shouldn't be here.
     unsigned int    frame_size[MAJOR_HEADER_INTERVAL];
     unsigned int    frame_number[MAJOR_HEADER_INTERVAL];
     unsigned int    frame_index;
@@ -281,12 +282,29 @@ static uint8_t default_param_presence_flags()
     return param_presence_flags;
 }
 
+static void default_decoding_params(MLPEncodeContext *ctx,
+     DecodingParams decoding_params[MAX_SUBSTREAMS])
+{
+    unsigned int substr;
+
+    clear_decoding_params(decoding_params);
+
+    for (substr = 0; substr < MAX_SUBSTREAMS; substr++) {
+        DecodingParams *dp = &decoding_params[substr];
+        unsigned int channel;
+
+        dp->param_presence_flags = default_param_presence_flags();
+
+        for (channel = 0; channel < MAX_CHANNELS; channel++)
+            dp->quant_step_size[channel] = ctx->quant_step_size;
+    }
+}
+
 static av_cold int mlp_encode_init(AVCodecContext *avctx)
 {
     MLPEncodeContext *ctx = avctx->priv_data;
     unsigned int big_sample_buffer_size;
     unsigned int lossless_check_data_size;
-    unsigned int quant_step_size;
     unsigned int substr;
 
     ctx->avctx = avctx;
@@ -307,9 +325,9 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     }
 
     switch (avctx->sample_fmt) {
-    case SAMPLE_FMT_S16: ctx->sample_fmt = BITS_16; quant_step_size = 8; break;
+    case SAMPLE_FMT_S16: ctx->sample_fmt = BITS_16; ctx->quant_step_size = 8; break;
     /* TODO 20 bits: */
-    case SAMPLE_FMT_S24: ctx->sample_fmt = BITS_24; quant_step_size = 0; break;
+    case SAMPLE_FMT_S24: ctx->sample_fmt = BITS_24; ctx->quant_step_size = 0; break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Sample format not supported. "
                "Only 16- and 24-bit samples are supported.\n");
@@ -353,21 +371,14 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         return -1;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
-        DecodingParams *dp = &ctx->decoding_params[substr];
         RestartHeader  *rh = &ctx->restart_header [substr];
-        unsigned int channel;
 
         rh->min_channel        = 0;
         rh->max_channel        = avctx->channels - 1;
         rh->max_matrix_channel = 1;
-
-        for (channel = 0; channel <= rh->max_channel; channel++) {
-            dp->quant_step_size[channel] = quant_step_size;
-        }
-
-        dp->param_presence_flags = default_param_presence_flags();
     }
 
+    default_decoding_params(ctx, ctx->decoding_params);
     clear_channel_params(ctx->channel_params);
 
     return 0;
