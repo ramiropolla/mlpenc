@@ -23,8 +23,14 @@
 #include "bitstream.h"
 #include "libavutil/crc.h"
 #include "mlp.h"
+#include "dsputil.h"
+#include "lpc.h"
 
 #define MAJOR_HEADER_INTERVAL 16
+
+#define MLP_MIN_LPC_ORDER      0
+#define MLP_MAX_LPC_ORDER      8
+#define MLP_MAX_LPC_SHIFT     16
 
 typedef struct {
     //! The index of the first channel coded in this substream.
@@ -92,6 +98,8 @@ typedef struct {
     int32_t        *big_sample_buffer;
     int32_t        *last_frame;
 
+    unsigned int    lpc_frame_size;
+
     int32_t        *lossless_check_data;
 
     uint8_t         quant_step_size; ///< TODO This shouldn't be here.
@@ -115,6 +123,8 @@ typedef struct {
 
     DecodingParams  decoding_params[MAX_SUBSTREAMS];
     RestartHeader   restart_header[MAX_SUBSTREAMS];
+
+    DSPContext      dsp;
 } MLPEncodeContext;
 
 #define SYNC_MAJOR      0xf8726f
@@ -381,6 +391,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     default_decoding_params(ctx, ctx->decoding_params);
     clear_channel_params(ctx->channel_params);
 
+    dsputil_init(&ctx->dsp, avctx);
+
     return 0;
 }
 
@@ -621,6 +633,7 @@ static void set_filter_params(MLPEncodeContext *ctx,
                               int restart_frame)
 {
     FilterParams *fp = &ctx->channel_params[channel].filter_params[filter];
+    unsigned int lpc_frame_size;
 
     /* Restart frames must not depend on filter state from previous frames. */
     if (restart_frame) {
@@ -628,10 +641,40 @@ static void set_filter_params(MLPEncodeContext *ctx,
         return;
     }
 
+    lpc_frame_size = ctx->frame_size[ctx->frame_index]
+                   * ctx->major_header_interval;
+
+    if (ctx->frame_size[ctx->frame_index] >
+        ctx->frame_size[ctx->major_header_interval - 1])
+        lpc_frame_size -= ctx->frame_size[ctx->frame_index]
+                        - ctx->frame_size[ctx->major_header_interval - 1];
+
+    ctx->lpc_frame_size = lpc_frame_size;
+
     if (filter == FIR) {
-        fp->order    =  1;
-        fp->shift    =  0;
-        fp->coeff[0] =  1;
+        int32_t *sample_buffer = ctx->sample_buffer + channel;
+        int32_t coefs[MAX_LPC_ORDER][MAX_LPC_ORDER];
+        int32_t samples[lpc_frame_size];
+        int32_t *lpc_samples = samples;
+        int shift[MLP_MAX_LPC_ORDER];
+        unsigned int i;
+        int order;
+
+        for (i = 0; i < lpc_frame_size; i++) {
+            *lpc_samples++ = *sample_buffer;
+            sample_buffer += ctx->num_channels;
+        }
+
+        order = ff_lpc_calc_coefs(&ctx->dsp, samples, lpc_frame_size,
+                                  MLP_MIN_LPC_ORDER, MLP_MAX_LPC_ORDER, 7,
+                                  coefs, shift, 1,
+                                  ORDER_METHOD_EST, MLP_MAX_LPC_SHIFT, 0);
+
+        fp->order = order;
+        fp->shift = shift[order-1];
+
+        for (i = 0; i < order; i++)
+            fp->coeff[i] = coefs[order-1][i];
     } else { /* IIR */
         fp->order    =  0;
         fp->shift    =  0;
@@ -654,21 +697,22 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
 {
     FilterParams *fp[NUM_FILTERS] = { &ctx->channel_params[channel].filter_params[FIR],
                                       &ctx->channel_params[channel].filter_params[IIR], };
-    int32_t filter_state_buffer[NUM_FILTERS][MAX_BLOCKSIZE + MAX_FILTER_ORDER];
+    int32_t filter_state_buffer[NUM_FILTERS][ctx->lpc_frame_size];
     int32_t mask = MSB_MASK(ctx->decoding_params[0].quant_step_size[channel]);
     int32_t *sample_buffer = ctx->sample_buffer + channel;
+    unsigned int lpc_frame_size = ctx->lpc_frame_size;
     unsigned int filter_shift = fp[FIR]->shift;
-    int index = MAX_BLOCKSIZE;
     int filter;
     int i;
 
-    for (filter = 0; filter < NUM_FILTERS; filter++) {
-        memcpy(&filter_state_buffer[filter][MAX_BLOCKSIZE],
-               &fp[filter]->state[0],
-               MAX_FILTER_ORDER * sizeof(int32_t));
+    for (i = 0; i < 8; i++) {
+        filter_state_buffer[FIR][i] = *sample_buffer;
+        filter_state_buffer[IIR][i] = *sample_buffer;
+
+        sample_buffer += ctx->num_channels;
     }
 
-    for (i = 0; i < ctx->frame_size[ctx->frame_index]; i++) {
+    for (i = 8; i < lpc_frame_size; i++) {
         int32_t sample = *sample_buffer;
         unsigned int order;
         int64_t accum = 0;
@@ -676,7 +720,7 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
 
         for (filter = 0; filter < NUM_FILTERS; filter++)
             for (order = 0; order < fp[filter]->order; order++)
-                accum += (int64_t)filter_state_buffer[filter][index + order] *
+                accum += (int64_t)filter_state_buffer[filter][i - 1 - order] *
                          fp[filter]->coeff[order];
 
         accum  >>= filter_shift;
@@ -685,29 +729,17 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
         if (residual < INT24_MIN || residual > INT24_MAX)
             return -1;
 
-        --index;
-
-        filter_state_buffer[FIR][index] = sample;
-        filter_state_buffer[IIR][index] = residual;
+        filter_state_buffer[FIR][i] = sample;
+        filter_state_buffer[IIR][i] = residual;
 
         sample_buffer += ctx->num_channels;
     }
 
-    index = MAX_BLOCKSIZE;
     sample_buffer = ctx->sample_buffer + channel;
-    for (i = 0; i < ctx->frame_size[ctx->frame_index]; i++) {
-        int32_t residual = filter_state_buffer[IIR][--index];
-
-        /* Store residual. */
-        *sample_buffer = residual;
+    for (i = 0; i < lpc_frame_size; i++) {
+        *sample_buffer = filter_state_buffer[IIR][i];
 
         sample_buffer += ctx->num_channels;
-    }
-
-    for (filter = 0; filter < NUM_FILTERS; filter++) {
-        memcpy(&fp[filter]->state[0],
-               &filter_state_buffer[filter][index],
-               MAX_FILTER_ORDER * sizeof(int32_t));
     }
 
     return 0;
@@ -1113,15 +1145,15 @@ static void write_frame_headers(MLPEncodeContext *ctx, uint8_t *frame_header,
 
 /** Tries to determine a good prediction filter, and applies it to the samples
  *  buffer if the filter is good enough. Sets the filter data to be cleared if
- *  this is a restart frame or no good filter was found.
+ *  no good filter was found.
  */
-static void determine_filters(MLPEncodeContext *ctx, int restart_frame)
+static void determine_filters(MLPEncodeContext *ctx)
 {
     int channel, filter;
 
     for (channel = 0; channel < ctx->avctx->channels; channel++) {
         for (filter = 0; filter < NUM_FILTERS; filter++)
-            set_filter_params(ctx, channel, filter, restart_frame);
+            set_filter_params(ctx, channel, filter, 0);
         if (apply_filter(ctx, channel) < 0) {
             /* Filter is horribly wrong.
              * Clear filter params and update state. */
@@ -1306,6 +1338,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         clear_decoding_params(decoding_params);
         clear_channel_params (channel_params );
         clear_channel_params(ctx->channel_params);
+
+    determine_filters(ctx);
     } else {
     memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
     memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
@@ -1326,8 +1360,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     buf2 = buf;
 
     total_length = buf - buf0;
-
-    determine_filters(ctx, restart_frame);
 
     buf = write_substrs(ctx, buf, buf_size, restart_frame, decoding_params,
                         substream_data_len, channel_params);
