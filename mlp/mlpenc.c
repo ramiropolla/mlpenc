@@ -266,6 +266,21 @@ static void clear_channel_params(ChannelParams channel_params[MAX_CHANNELS])
     }
 }
 
+static uint8_t default_param_presence_flags()
+{
+    uint8_t param_presence_flags = 0;
+
+    param_presence_flags |= PARAM_BLOCKSIZE;
+/*  param_presence_flags |= PARAM_MATRIX; */
+/*  param_presence_flags |= PARAM_OUTSHIFT; */
+    param_presence_flags |= PARAM_QUANTSTEP;
+    param_presence_flags |= PARAM_FIR;
+/*  param_presence_flags |= PARAM_IIR; */
+    param_presence_flags |= PARAM_HUFFOFFSET;
+
+    return param_presence_flags;
+}
+
 static av_cold int mlp_encode_init(AVCodecContext *avctx)
 {
     MLPEncodeContext *ctx = avctx->priv_data;
@@ -340,7 +355,6 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams *dp = &ctx->decoding_params[substr];
         RestartHeader  *rh = &ctx->restart_header [substr];
-        uint8_t param_presence_flags = 0;
         unsigned int channel;
 
         rh->min_channel        = 0;
@@ -354,15 +368,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
             cp->huff_lsbs                = 24;
         }
 
-        param_presence_flags |= PARAM_BLOCKSIZE;
-/*      param_presence_flags |= PARAM_MATRIX; */
-/*      param_presence_flags |= PARAM_OUTSHIFT; */
-        param_presence_flags |= PARAM_QUANTSTEP;
-        param_presence_flags |= PARAM_FIR;
-/*      param_presence_flags |= PARAM_IIR; */
-        param_presence_flags |= PARAM_HUFFOFFSET;
-
-        dp->param_presence_flags = param_presence_flags;
+        dp->param_presence_flags = default_param_presence_flags();
     }
 
     return 0;
