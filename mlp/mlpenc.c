@@ -1098,14 +1098,37 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
     lossless_check_data += ctx->frame_index * ctx->num_substreams;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
+        unsigned int subblock, num_subblocks = restart_frame;
         DecodingParams *dp = &ctx->decoding_params[substr];
         RestartHeader  *rh = &ctx->restart_header [substr];
+        ChannelParams backup_cp[MAX_CHANNELS];
+        int32_t *backup_sample_buffer;
         uint8_t parity, checksum;
         PutBitContext pb, tmpb;
         int params_changed;
         int last_block = 0;
 
         init_put_bits(&pb, buf, buf_size);
+
+        for (subblock = 0; subblock <= num_subblocks; subblock++) {
+
+        if (num_subblocks) {
+            if (!subblock) {
+                dp->blocksize = 8;
+
+                backup_sample_buffer = ctx->sample_buffer;
+
+                memcpy(backup_cp, ctx->channel_params, sizeof(backup_cp));
+                memcpy(ctx->channel_params, channel_params, sizeof(ctx->channel_params));
+            } else {
+                ctx->sample_buffer += ctx->num_channels * dp->blocksize;
+                dp->blocksize = ctx->frame_size[ctx->frame_index] - dp->blocksize;
+
+                memcpy(ctx->channel_params, backup_cp, sizeof(ctx->channel_params));
+
+                restart_frame = 0;
+            }
+        }
 
         if (ctx->frame_size[ctx->frame_index] < dp->blocksize) {
             dp->blocksize = ctx->frame_size[ctx->frame_index];
@@ -1135,11 +1158,16 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
             put_bits(&pb, 1, 0);
         }
 
+        if (!restart_frame)
         rh->lossless_check_data ^= *lossless_check_data++;
 
         write_block_data(ctx, &pb, substr);
 
-        put_bits(&pb, 1, 1); /* TODO ??? */
+        put_bits(&pb, 1, !restart_frame);
+        }
+
+        if (num_subblocks)
+            ctx->sample_buffer = backup_sample_buffer;
 
         put_bits(&pb, (-put_bits_count(&pb)) & 15, 0);
 
