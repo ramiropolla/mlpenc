@@ -1197,7 +1197,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
     return buf;
 }
 
-static void default_decoding_params(DecodingParams decoding_params[MAX_SUBSTREAMS])
+static void clear_decoding_params(DecodingParams decoding_params[MAX_SUBSTREAMS])
 {
     unsigned int substr;
 
@@ -1213,7 +1213,7 @@ static void default_decoding_params(DecodingParams decoding_params[MAX_SUBSTREAM
     }
 }
 
-static void default_channel_params(ChannelParams channel_params[MAX_CHANNELS])
+static void clear_channel_params(ChannelParams channel_params[MAX_CHANNELS])
 {
     unsigned int channel;
 
@@ -1286,8 +1286,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         buf      += 28;
         buf_size -= 28;
 
-        default_decoding_params(decoding_params);
-        default_channel_params (channel_params );
+        clear_decoding_params(decoding_params);
+        clear_channel_params (channel_params );
     } else {
     memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
     memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
