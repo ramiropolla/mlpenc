@@ -953,6 +953,10 @@ static int compare_filter_params(FilterParams *prev, FilterParams *fp)
 
     if (prev->order != fp->order)
         return 1;
+
+    if (!prev->order)
+        return 0;
+
     if (prev->shift != fp->shift)
         return 1;
 
