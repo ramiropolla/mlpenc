@@ -1112,58 +1112,58 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
         for (subblock = 0; subblock <= num_subblocks; subblock++) {
 
-        if (num_subblocks) {
-            if (!subblock) {
-                dp->blocksize = 8;
+            if (num_subblocks) {
+                if (!subblock) {
+                    dp->blocksize = 8;
 
-                backup_sample_buffer = ctx->sample_buffer;
+                    backup_sample_buffer = ctx->sample_buffer;
 
-                memcpy(backup_cp, ctx->channel_params, sizeof(backup_cp));
-                memcpy(ctx->channel_params, channel_params, sizeof(ctx->channel_params));
-            } else {
-                ctx->sample_buffer += ctx->num_channels * dp->blocksize;
-                dp->blocksize = ctx->frame_size[ctx->frame_index] - dp->blocksize;
+                    memcpy(backup_cp, ctx->channel_params, sizeof(backup_cp));
+                    memcpy(ctx->channel_params, channel_params, sizeof(ctx->channel_params));
+                } else {
+                    ctx->sample_buffer += ctx->num_channels * dp->blocksize;
+                    dp->blocksize = ctx->frame_size[ctx->frame_index] - dp->blocksize;
 
-                memcpy(ctx->channel_params, backup_cp, sizeof(ctx->channel_params));
+                    memcpy(ctx->channel_params, backup_cp, sizeof(ctx->channel_params));
 
-                restart_frame = 0;
+                    restart_frame = 0;
+                }
             }
-        }
 
-        if (ctx->frame_size[ctx->frame_index] < dp->blocksize) {
-            dp->blocksize = ctx->frame_size[ctx->frame_index];
-            last_block = 1;
-        }
+            if (ctx->frame_size[ctx->frame_index] < dp->blocksize) {
+                dp->blocksize = ctx->frame_size[ctx->frame_index];
+                last_block = 1;
+            }
 
-        determine_bits(ctx, substr);
+            determine_bits(ctx, substr);
 
-        params_changed = decoding_params_diff(ctx, &decoding_params[substr],
-                                              channel_params,
-                                              substr);
+            params_changed = decoding_params_diff(ctx, &decoding_params[substr],
+                                                channel_params,
+                                                substr);
 
-        if (restart_frame || params_changed) {
-            put_bits(&pb, 1, 1);
-
-            if (restart_frame) {
+            if (restart_frame || params_changed) {
                 put_bits(&pb, 1, 1);
 
-                write_restart_header(ctx, &pb, substr);
-                rh->lossless_check_data = 0;
+                if (restart_frame) {
+                    put_bits(&pb, 1, 1);
+
+                    write_restart_header(ctx, &pb, substr);
+                    rh->lossless_check_data = 0;
+                } else {
+                    put_bits(&pb, 1, 0);
+                }
+
+                write_decoding_params(ctx, &pb, substr, params_changed);
             } else {
                 put_bits(&pb, 1, 0);
             }
 
-            write_decoding_params(ctx, &pb, substr, params_changed);
-        } else {
-            put_bits(&pb, 1, 0);
-        }
+            if (!restart_frame)
+                rh->lossless_check_data ^= *lossless_check_data++;
 
-        if (!restart_frame)
-        rh->lossless_check_data ^= *lossless_check_data++;
+            write_block_data(ctx, &pb, substr);
 
-        write_block_data(ctx, &pb, substr);
-
-        put_bits(&pb, 1, !restart_frame);
+            put_bits(&pb, 1, !restart_frame);
         }
 
         if (num_subblocks)
