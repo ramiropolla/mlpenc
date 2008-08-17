@@ -213,7 +213,7 @@ static void write_restart_header(MLPEncodeContext *ctx,
     for (ch = 0; ch <= rh->max_matrix_channel; ch++)
         put_bits(pb, 6, ch);
 
-    /* Data must be flushed for the checksum to be right. */
+    /* Data must be flushed for the checksum to be correct. */
     tmpb = *pb;
     flush_put_bits(&tmpb);
 
