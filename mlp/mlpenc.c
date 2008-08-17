@@ -972,15 +972,12 @@ static int compare_filter_params(FilterParams *prev, FilterParams *fp)
  */
 static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
                                 ChannelParams channel_params[MAX_CHANNELS],
-                                unsigned int substr, int write_all)
+                                unsigned int substr)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
     unsigned int ch;
     int retval = 0;
-
-    if (write_all)
-        return PARAM_PRESENCE_FLAGS | PARAMS_DEFAULT;
 
     if (prev->param_presence_flags != dp->param_presence_flags)
         retval |= PARAM_PRESENCE_FLAGS;
@@ -1117,7 +1114,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
         params_changed = decoding_params_diff(ctx, &decoding_params[substr],
                                               channel_params,
-                                              substr, restart_frame);
+                                              substr);
 
         init_put_bits(&pb, buf, buf_size);
 
@@ -1172,6 +1169,38 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
     return buf;
 }
 
+static void default_decoding_params(DecodingParams decoding_params[MAX_SUBSTREAMS])
+{
+    unsigned int substr;
+
+    for (substr = 0; substr < MAX_SUBSTREAMS; substr++) {
+        DecodingParams *dp = &decoding_params[substr];
+
+        dp->param_presence_flags   = 0xff;
+        dp->num_primitive_matrices = 0;
+        dp->blocksize              = 8;
+
+        memset(dp->output_shift   , 0, sizeof(dp->output_shift   ));
+        memset(dp->quant_step_size, 0, sizeof(dp->quant_step_size));
+    }
+}
+
+static void default_channel_params(ChannelParams channel_params[MAX_CHANNELS])
+{
+    unsigned int channel;
+
+    for (channel = 0; channel < MAX_CHANNELS; channel++) {
+        ChannelParams *cp = &channel_params[channel];
+
+        memset(&cp->filter_params, 0, sizeof(cp->filter_params));
+
+        /* Default audio coding is 24-bit raw PCM. */
+        cp->huff_offset      =  0;
+        cp->codebook         =  0;
+        cp->huff_lsbs        = 24;
+    }
+}
+
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                             void *data)
 {
@@ -1213,9 +1242,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         return -1;
     }
 
-    memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
-    memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
-
     if (buf_size < 4)
         return -1;
 
@@ -1231,6 +1257,12 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         write_major_sync(ctx, buf, buf_size);
         buf      += 28;
         buf_size -= 28;
+
+        default_decoding_params(decoding_params);
+        default_channel_params (channel_params );
+    } else {
+    memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
+    memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
     }
 
     buf1 = buf;
