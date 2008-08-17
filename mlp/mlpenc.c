@@ -1172,6 +1172,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
                     ctx->sample_buffer += ctx->num_channels * dp->blocksize;
                     dp->blocksize = ctx->frame_size[ctx->frame_index] - dp->blocksize;
 
+                    memcpy(channel_params, ctx->channel_params, sizeof(ctx->channel_params));
                     memcpy(ctx->channel_params, backup_cp, sizeof(ctx->channel_params));
 
                     restart_frame = 0;
@@ -1304,6 +1305,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
         clear_decoding_params(decoding_params);
         clear_channel_params (channel_params );
+        clear_channel_params(ctx->channel_params);
     } else {
     memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
     memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
