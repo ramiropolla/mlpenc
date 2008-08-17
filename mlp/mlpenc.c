@@ -42,17 +42,17 @@ typedef struct {
     //! Set if the substream contains extra info to check the size of VLC blocks.
     int             data_check_present;
 
-    //! Running XOR of all output samples.
+    //! XOR of all output samples
     int32_t         lossless_check_data;
 } RestartHeader;
 
 typedef struct {
     //! number of PCM samples in current audio block
     uint16_t        blocksize;
-    //! Left shift to apply to Huffman-decoded residuals.
+    //! left shift to apply to Huffman-decoded residuals
     uint8_t         quant_step_size[MAX_CHANNELS];
 
-    //! Number of matrices to be applied.
+    //! number of matrices to apply
     uint8_t         num_primitive_matrices;
 
     //! Left shift to apply to decoded PCM values to get final 24-bit output.
@@ -85,8 +85,8 @@ typedef struct {
     int             num_channels;   /**< Number of channels in big_sample_buffer.
                                      *   Normal channels + noise channels. */
 
-    int             sample_fmt;     ///< Sample format encoded for MLP
-    int             sample_rate;    ///< Sample rate encoded for MLP
+    int             sample_fmt;     ///< sample format encoded for MLP
+    int             sample_rate;    ///< sample rate encoded for MLP
 
     int32_t        *sample_buffer;
     int32_t        *big_sample_buffer;
@@ -104,11 +104,11 @@ typedef struct {
 
     uint16_t        timestamp;
 
-    uint8_t         mlp_channels;   ///< Channel arrangement for MLP streams
+    uint8_t         mlp_channels;   ///< channel arrangement for MLP streams
 
     uint8_t         mlp_channels2;  ///< 1 bit for each channel
     uint8_t         mlp_channels3;  /**< TODO unknown channel-related field
-                                     *   These values are right for mono and stereo */
+                                     *   These values are correct for mono and stereo. */
 
     ChannelParams   channel_params[MAX_CHANNELS];
 
@@ -153,19 +153,19 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
     put_bits(&pb,  4, ctx->sample_fmt  );
     put_bits(&pb,  4, ctx->sample_rate );
     put_bits(&pb,  4, ctx->sample_rate );
-    put_bits(&pb, 11, 0                ); /* This value is 0 in all MLP
-                                           * samples tested. */
+    put_bits(&pb, 11, 0                ); /* This value is 0 in all tested
+                                           * MLP samples. */
     put_bits(&pb,  5, ctx->mlp_channels);
 
-    /* These values seem to be constant for all MLP samples tested. */
+    /* These values seem to be constant for all tested MLP samples. */
     put_bits(&pb, 16, 0xb752);
     put_bits(&pb, 16, 0x4000);
     put_bits(&pb, 16, 0x0000);
 
-    put_bits(&pb,  1, 1); /* This value is 1 in all MLP samples tested.
+    put_bits(&pb,  1, 1); /* This value is 1 in all tested MLP samples.
                            * I suppose it would be 0 only when no filters
                            * or codebooks are used. */
-    put_bits(&pb, 15, 0); /* TODO peak_bitrate: most MLP samples tested encode
+    put_bits(&pb, 15, 0); /* TODO peak_bitrate: Most MLP samples tested encode
                            * a value that evaluates peak_bitrate to 9600000 or
                            * a little bit less. */
     put_bits(&pb,  4, 1); /* TODO Support more num_substreams. */
@@ -176,7 +176,7 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
                                  * 44100Hz. */
     put_bits(&pb,  8, ctx->mlp_channels2);
     put_bits(&pb, 32, 0x00008080); /* These values seem */
-    put_bits(&pb,  8, 0x00      ); /* to be constants   */
+    put_bits(&pb,  8, 0x00      ); /* to be constants.  */
     put_bits(&pb,  8, ctx->mlp_channels3); /* TODO Finish understanding this field. */
 
     flush_put_bits(&pb);
@@ -208,12 +208,12 @@ static void write_restart_header(MLPEncodeContext *ctx,
     put_bits(pb, 19, 0                     ); /* TODO What the hell is this? */
     put_bits(pb,  1, rh->data_check_present);
     put_bits(pb,  8, lossless_check        );
-    put_bits(pb, 16, 0                     ); /* this is zero =) */
+    put_bits(pb, 16, 0                     ); /* This is zero =) */
 
     for (ch = 0; ch <= rh->max_matrix_channel; ch++)
         put_bits(pb, 6, ch);
 
-    /* data must be flushed for the checksum to be right. */
+    /* Data must be flushed for the checksum to be right. */
     tmpb = *pb;
     flush_put_bits(&tmpb);
 
@@ -696,7 +696,7 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     int lsb_bits;
 
     /* Set offset inside huffoffset's boundaries by adjusting extremes
-     * so that more bits are used thus shifting the offset. */
+     * so that more bits are used, thus shifting the offset. */
     if (min < HUFF_OFFSET_MIN)
         max = FFMAX(max, HUFF_OFFSET_MIN + HUFF_OFFSET_MIN - min + 1);
     if (max > HUFF_OFFSET_MAX)
@@ -892,7 +892,7 @@ static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
     }
 }
 
-/** Writes the residuals to the bitstream. That is, the vlc codes from the
+/** Writes the residuals to the bitstream. That is, the VLC codes from the
  *  codebooks (if any is used), and then the residual.
  */
 static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
@@ -1176,7 +1176,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
             put_bits(&pb, 32, END_OF_STREAM);
         }
 
-        /* data must be flushed for the checksum and parity to be right. */
+        /* Data must be flushed for the checksum and parity to be correct. */
         tmpb = pb;
         flush_put_bits(&tmpb);
 
