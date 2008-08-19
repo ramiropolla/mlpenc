@@ -639,24 +639,24 @@ static int number_trailing_zeroes(int32_t sample)
 
 static void determine_quant_step_size(MLPEncodeContext *ctx, unsigned int substr)
 {
-        DecodingParams *dp = &ctx->decoding_params[substr];
-        RestartHeader  *rh = &ctx->restart_header [substr];
-        int32_t *sample_buffer = ctx->sample_buffer;
-        int32_t sample_mask[MAX_CHANNELS];
-        unsigned int channel;
-        int i;
+    DecodingParams *dp = &ctx->decoding_params[substr];
+    RestartHeader  *rh = &ctx->restart_header [substr];
+    int32_t *sample_buffer = ctx->sample_buffer;
+    int32_t sample_mask[MAX_CHANNELS];
+    unsigned int channel;
+    int i;
 
-        memset(sample_mask, 0x00, sizeof(sample_mask));
+    memset(sample_mask, 0x00, sizeof(sample_mask));
 
-        for (i = 0; i < ctx->major_frame_size; i++) {
-            for (channel = 0; channel <= rh->max_channel; channel++)
-                sample_mask[channel] |= *sample_buffer++;
-
-            sample_buffer += 2; /* noise channels */
-        }
-
+    for (i = 0; i < ctx->major_frame_size; i++) {
         for (channel = 0; channel <= rh->max_channel; channel++)
-            dp->quant_step_size[channel] = number_trailing_zeroes(sample_mask[channel]);
+            sample_mask[channel] |= *sample_buffer++;
+
+        sample_buffer += 2; /* noise channels */
+    }
+
+    for (channel = 0; channel <= rh->max_channel; channel++)
+        dp->quant_step_size[channel] = number_trailing_zeroes(sample_mask[channel]);
 }
 
 /** Determines the best filter parameters for the given data and writes the
@@ -1381,13 +1381,13 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         ctx->major_frame_size = calculate_major_frame_size(ctx);
 
         for (substr = 0; substr < ctx->num_substreams; substr++) {
-        determine_quant_step_size(ctx, substr);
+            determine_quant_step_size(ctx, substr);
         }
 
-    determine_filters(ctx);
+        determine_filters(ctx);
     } else {
-    memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
-    memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
+        memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
+        memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
     }
 
     buf1 = buf;
