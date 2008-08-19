@@ -102,6 +102,7 @@ typedef struct {
     int32_t        *last_frame;
 
     unsigned int    major_frame_size;
+    unsigned int    next_major_frame_size;
 
     int32_t        *lossless_check_data;
 
@@ -1329,21 +1330,6 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
     return buf;
 }
 
-static unsigned int calculate_major_frame_size(MLPEncodeContext *ctx)
-{
-    unsigned int major_frame_size;
-
-    major_frame_size = ctx->frame_size[ctx->frame_index]
-                     * ctx->major_header_interval;
-
-    if (ctx->frame_size[ctx->frame_index] >
-        ctx->frame_size[ctx->major_header_interval - 1])
-        major_frame_size -= ctx->frame_size[ctx->frame_index]
-                          - ctx->frame_size[ctx->major_header_interval - 1];
-
-    return major_frame_size;
-}
-
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                             void *data)
 {
@@ -1405,7 +1391,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         clear_channel_params (channel_params );
         clear_channel_params(ctx->channel_params);
 
-        ctx->major_frame_size = calculate_major_frame_size(ctx);
+        ctx->major_frame_size = ctx->next_major_frame_size;
+        ctx->next_major_frame_size = 0;
 
         for (substr = 0; substr < ctx->num_substreams; substr++) {
             determine_quant_step_size(ctx, substr);
@@ -1446,6 +1433,7 @@ input_and_return:
 
     if (data) {
         ctx->frame_size[ctx->frame_index] = avctx->frame_size;
+        ctx->next_major_frame_size += avctx->frame_size;
         input_data(ctx, data);
     } else if (!ctx->last_frame) {
         ctx->last_frame = ctx->sample_buffer;
