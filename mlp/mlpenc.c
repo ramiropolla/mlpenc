@@ -102,7 +102,7 @@ typedef struct {
 
     int32_t        *lossless_check_data;
 
-    unsigned int    frame_size[MAJOR_HEADER_INTERVAL];
+    unsigned int   *frame_size;
     unsigned int    frame_index;
 
     unsigned int    one_sample_buffer_size;
@@ -309,6 +309,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     MLPEncodeContext *ctx = avctx->priv_data;
     unsigned int major_frame_buffer_size;
     unsigned int lossless_check_data_size;
+    unsigned int frame_size_size;
     unsigned int substr;
 
     ctx->avctx = avctx;
@@ -366,6 +367,13 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     ctx->mlp_channels2  = (1 << avctx->channels) - 1;
     ctx->mlp_channels3  = code_channels3(avctx->channels);
     ctx->num_substreams = 1;
+
+    frame_size_size = sizeof(unsigned int)
+                    * ctx->major_header_interval;
+
+    ctx->frame_size = av_malloc(frame_size_size);
+    if (!ctx->frame_size)
+        return -1;
 
     lossless_check_data_size = sizeof(int32_t) * ctx->num_substreams
                              * ctx->major_header_interval;
@@ -1428,6 +1436,7 @@ static av_cold int mlp_encode_close(AVCodecContext *avctx)
     av_freep(&ctx->lossless_check_data);
     av_freep(&ctx->major_frame_buffer);
     av_freep(&avctx->coded_frame);
+    av_freep(&ctx->frame_size);
 
     return 0;
 }
