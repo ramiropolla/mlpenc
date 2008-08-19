@@ -633,7 +633,6 @@ static void set_filter_params(MLPEncodeContext *ctx,
                               int restart_frame)
 {
     FilterParams *fp = &ctx->channel_params[channel].filter_params[filter];
-    unsigned int major_frame_size;
 
     /* Restart frames must not depend on filter state from previous frames. */
     if (restart_frame) {
@@ -641,31 +640,21 @@ static void set_filter_params(MLPEncodeContext *ctx,
         return;
     }
 
-    major_frame_size = ctx->frame_size[ctx->frame_index]
-                   * ctx->major_header_interval;
-
-    if (ctx->frame_size[ctx->frame_index] >
-        ctx->frame_size[ctx->major_header_interval - 1])
-        major_frame_size -= ctx->frame_size[ctx->frame_index]
-                        - ctx->frame_size[ctx->major_header_interval - 1];
-
-    ctx->major_frame_size = major_frame_size;
-
     if (filter == FIR) {
         int32_t *sample_buffer = ctx->sample_buffer + channel;
         int32_t coefs[MAX_LPC_ORDER][MAX_LPC_ORDER];
-        int32_t samples[major_frame_size];
+        int32_t samples[ctx->major_frame_size];
         int32_t *lpc_samples = samples;
         int shift[MLP_MAX_LPC_ORDER];
         unsigned int i;
         int order;
 
-        for (i = 0; i < major_frame_size; i++) {
+        for (i = 0; i < ctx->major_frame_size; i++) {
             *lpc_samples++ = *sample_buffer;
             sample_buffer += ctx->num_channels;
         }
 
-        order = ff_lpc_calc_coefs(&ctx->dsp, samples, major_frame_size,
+        order = ff_lpc_calc_coefs(&ctx->dsp, samples, ctx->major_frame_size,
                                   MLP_MIN_LPC_ORDER, MLP_MAX_LPC_ORDER, 7,
                                   coefs, shift, 1,
                                   ORDER_METHOD_EST, MLP_MAX_LPC_SHIFT, 0);
@@ -1278,6 +1267,21 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
     return buf;
 }
 
+static unsigned int calculate_major_frame_size(MLPEncodeContext *ctx)
+{
+    unsigned int major_frame_size;
+
+    major_frame_size = ctx->frame_size[ctx->frame_index]
+                     * ctx->major_header_interval;
+
+    if (ctx->frame_size[ctx->frame_index] >
+        ctx->frame_size[ctx->major_header_interval - 1])
+        major_frame_size -= ctx->frame_size[ctx->frame_index]
+                          - ctx->frame_size[ctx->major_header_interval - 1];
+
+    return major_frame_size;
+}
+
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                             void *data)
 {
@@ -1338,6 +1342,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         clear_decoding_params(decoding_params);
         clear_channel_params (channel_params );
         clear_channel_params(ctx->channel_params);
+
+        ctx->major_frame_size = calculate_major_frame_size(ctx);
 
     determine_filters(ctx);
     } else {
