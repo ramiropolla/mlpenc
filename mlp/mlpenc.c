@@ -1369,7 +1369,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     buf      += 4;
     buf_size -= 4;
 
-    restart_frame = !(avctx->frame_number & (MAJOR_HEADER_INTERVAL - 1));
+    restart_frame = !(avctx->frame_number & (ctx->major_header_interval - 1));
 
     if (restart_frame) {
         if (buf_size < 28)
