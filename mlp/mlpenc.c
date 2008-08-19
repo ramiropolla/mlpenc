@@ -103,7 +103,6 @@ typedef struct {
     int32_t        *lossless_check_data;
 
     unsigned int    frame_size[MAJOR_HEADER_INTERVAL];
-    unsigned int    frame_number[MAJOR_HEADER_INTERVAL];
     unsigned int    frame_index;
 
     unsigned int    one_sample_buffer_size;
@@ -1362,7 +1361,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     buf      += 4;
     buf_size -= 4;
 
-    restart_frame = !(ctx->frame_number[ctx->frame_index] & (MAJOR_HEADER_INTERVAL - 1));
+    restart_frame = !(avctx->frame_number & (MAJOR_HEADER_INTERVAL - 1));
 
     if (restart_frame) {
         if (buf_size < 28)
@@ -1414,7 +1413,6 @@ input_and_return:
 
     if (data) {
         ctx->frame_size[ctx->frame_index] = avctx->frame_size;
-        ctx->frame_number[ctx->frame_index] = avctx->frame_number;
         input_data(ctx, data);
     } else if (!ctx->last_frame) {
         ctx->last_frame = ctx->sample_buffer;
