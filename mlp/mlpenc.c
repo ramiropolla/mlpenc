@@ -98,7 +98,7 @@ typedef struct {
     int32_t        *major_frame_buffer;
     int32_t        *last_frame;
 
-    unsigned int    lpc_frame_size;
+    unsigned int    major_frame_size;
 
     int32_t        *lossless_check_data;
 
@@ -633,7 +633,7 @@ static void set_filter_params(MLPEncodeContext *ctx,
                               int restart_frame)
 {
     FilterParams *fp = &ctx->channel_params[channel].filter_params[filter];
-    unsigned int lpc_frame_size;
+    unsigned int major_frame_size;
 
     /* Restart frames must not depend on filter state from previous frames. */
     if (restart_frame) {
@@ -641,31 +641,31 @@ static void set_filter_params(MLPEncodeContext *ctx,
         return;
     }
 
-    lpc_frame_size = ctx->frame_size[ctx->frame_index]
+    major_frame_size = ctx->frame_size[ctx->frame_index]
                    * ctx->major_header_interval;
 
     if (ctx->frame_size[ctx->frame_index] >
         ctx->frame_size[ctx->major_header_interval - 1])
-        lpc_frame_size -= ctx->frame_size[ctx->frame_index]
+        major_frame_size -= ctx->frame_size[ctx->frame_index]
                         - ctx->frame_size[ctx->major_header_interval - 1];
 
-    ctx->lpc_frame_size = lpc_frame_size;
+    ctx->major_frame_size = major_frame_size;
 
     if (filter == FIR) {
         int32_t *sample_buffer = ctx->sample_buffer + channel;
         int32_t coefs[MAX_LPC_ORDER][MAX_LPC_ORDER];
-        int32_t samples[lpc_frame_size];
+        int32_t samples[major_frame_size];
         int32_t *lpc_samples = samples;
         int shift[MLP_MAX_LPC_ORDER];
         unsigned int i;
         int order;
 
-        for (i = 0; i < lpc_frame_size; i++) {
+        for (i = 0; i < major_frame_size; i++) {
             *lpc_samples++ = *sample_buffer;
             sample_buffer += ctx->num_channels;
         }
 
-        order = ff_lpc_calc_coefs(&ctx->dsp, samples, lpc_frame_size,
+        order = ff_lpc_calc_coefs(&ctx->dsp, samples, major_frame_size,
                                   MLP_MIN_LPC_ORDER, MLP_MAX_LPC_ORDER, 7,
                                   coefs, shift, 1,
                                   ORDER_METHOD_EST, MLP_MAX_LPC_SHIFT, 0);
@@ -697,10 +697,10 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
 {
     FilterParams *fp[NUM_FILTERS] = { &ctx->channel_params[channel].filter_params[FIR],
                                       &ctx->channel_params[channel].filter_params[IIR], };
-    int32_t filter_state_buffer[NUM_FILTERS][ctx->lpc_frame_size];
+    int32_t filter_state_buffer[NUM_FILTERS][ctx->major_frame_size];
     int32_t mask = MSB_MASK(ctx->decoding_params[0].quant_step_size[channel]);
     int32_t *sample_buffer = ctx->sample_buffer + channel;
-    unsigned int lpc_frame_size = ctx->lpc_frame_size;
+    unsigned int major_frame_size = ctx->major_frame_size;
     unsigned int filter_shift = fp[FIR]->shift;
     int filter;
     int i;
@@ -712,7 +712,7 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
         sample_buffer += ctx->num_channels;
     }
 
-    for (i = 8; i < lpc_frame_size; i++) {
+    for (i = 8; i < major_frame_size; i++) {
         int32_t sample = *sample_buffer;
         unsigned int order;
         int64_t accum = 0;
@@ -736,7 +736,7 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
     }
 
     sample_buffer = ctx->sample_buffer + channel;
-    for (i = 0; i < lpc_frame_size; i++) {
+    for (i = 0; i < major_frame_size; i++) {
         *sample_buffer = filter_state_buffer[IIR][i];
 
         sample_buffer += ctx->num_channels;
