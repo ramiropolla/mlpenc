@@ -637,11 +637,8 @@ static int number_trailing_zeroes(int32_t sample)
     return bits;
 }
 
-static void determine_quant_step_size(MLPEncodeContext *ctx)
+static void determine_quant_step_size(MLPEncodeContext *ctx, unsigned int substr)
 {
-    unsigned int substr;
-
-    for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams *dp = &ctx->decoding_params[substr];
         RestartHeader  *rh = &ctx->restart_header [substr];
         int32_t *sample_buffer = ctx->sample_buffer;
@@ -660,7 +657,6 @@ static void determine_quant_step_size(MLPEncodeContext *ctx)
 
         for (channel = 0; channel <= rh->max_channel; channel++)
             dp->quant_step_size[channel] = number_trailing_zeroes(sample_mask[channel]);
-    }
 }
 
 /** Determines the best filter parameters for the given data and writes the
@@ -1384,7 +1380,9 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
         ctx->major_frame_size = calculate_major_frame_size(ctx);
 
-        determine_quant_step_size(ctx);
+        for (substr = 0; substr < ctx->num_substreams; substr++) {
+        determine_quant_step_size(ctx, substr);
+        }
 
     determine_filters(ctx);
     } else {
