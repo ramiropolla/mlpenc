@@ -102,7 +102,6 @@ typedef struct {
 
     int32_t        *lossless_check_data;
 
-    uint8_t         quant_step_size; ///< TODO This shouldn't be here.
     unsigned int    frame_size[MAJOR_HEADER_INTERVAL];
     unsigned int    frame_number[MAJOR_HEADER_INTERVAL];
     unsigned int    frame_index;
@@ -301,12 +300,8 @@ static void default_decoding_params(MLPEncodeContext *ctx,
 
     for (substr = 0; substr < MAX_SUBSTREAMS; substr++) {
         DecodingParams *dp = &decoding_params[substr];
-        unsigned int channel;
 
         dp->param_presence_flags = default_param_presence_flags();
-
-        for (channel = 0; channel < MAX_CHANNELS; channel++)
-            dp->quant_step_size[channel] = ctx->quant_step_size;
     }
 }
 
@@ -335,9 +330,9 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     }
 
     switch (avctx->sample_fmt) {
-    case SAMPLE_FMT_S16: ctx->sample_fmt = BITS_16; ctx->quant_step_size = 8; break;
+    case SAMPLE_FMT_S16: ctx->sample_fmt = BITS_16; break;
     /* TODO 20 bits: */
-    case SAMPLE_FMT_S24: ctx->sample_fmt = BITS_24; ctx->quant_step_size = 0; break;
+    case SAMPLE_FMT_S24: ctx->sample_fmt = BITS_24; break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Sample format not supported. "
                "Only 16- and 24-bit samples are supported.\n");
@@ -589,7 +584,6 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
     lossless_check_data += ctx->frame_index * ctx->num_substreams;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
-        DecodingParams *dp = &ctx->decoding_params[substr];
         RestartHeader  *rh = &ctx->restart_header [substr];
         int32_t *sample_buffer = ctx->sample_buffer;
         int32_t temp_lossless_check_data = 0;
@@ -601,9 +595,7 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
                 int32_t sample;
 
                 if (is24) sample = *samples_32++ >> 8;
-                else      sample = *samples_16++;
-
-                sample <<= dp->quant_step_size[channel];
+                else      sample = *samples_16++ << 8;
 
                 temp_lossless_check_data ^= (sample & 0x00ffffff) << channel;
                 *sample_buffer++ = sample;
@@ -622,6 +614,46 @@ static void input_data(MLPEncodeContext *ctx, void *samples)
         input_data_internal(ctx, samples, 1);
     else
         input_data_internal(ctx, samples, 0);
+}
+
+static int number_trailing_zeroes(int32_t sample)
+{
+    int bits;
+
+    for (bits = 0; bits < 24 && !(sample & (1<<bits)); bits++);
+
+    /* All samples are 0. TODO Return previous quant_step_size to avoid
+     * writing a new header. */
+    if (bits == 24)
+        return 0;
+
+    return bits;
+}
+
+static void determine_quant_step_size(MLPEncodeContext *ctx)
+{
+    unsigned int substr;
+
+    for (substr = 0; substr < ctx->num_substreams; substr++) {
+        DecodingParams *dp = &ctx->decoding_params[substr];
+        RestartHeader  *rh = &ctx->restart_header [substr];
+        int32_t *sample_buffer = ctx->sample_buffer;
+        int32_t sample_mask[MAX_CHANNELS];
+        unsigned int channel;
+        int i;
+
+        memset(sample_mask, 0x00, sizeof(sample_mask));
+
+        for (i = 0; i < ctx->major_frame_size; i++) {
+            for (channel = 0; channel <= rh->max_channel; channel++)
+                sample_mask[channel] |= *sample_buffer++;
+
+            sample_buffer += 2; /* noise channels */
+        }
+
+        for (channel = 0; channel <= rh->max_channel; channel++)
+            dp->quant_step_size[channel] = number_trailing_zeroes(sample_mask[channel]);
+    }
 }
 
 /** Determines the best filter parameters for the given data and writes the
@@ -1344,6 +1376,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         clear_channel_params(ctx->channel_params);
 
         ctx->major_frame_size = calculate_major_frame_size(ctx);
+
+        determine_quant_step_size(ctx);
 
     determine_filters(ctx);
     } else {
