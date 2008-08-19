@@ -1080,8 +1080,11 @@ static int compare_primitive_matrices(DecodingParams *prev, DecodingParams *dp)
 {
     unsigned int channel, mat;
 
-    if (dp->num_primitive_matrices != dp->num_primitive_matrices)
+    if (prev->num_primitive_matrices != dp->num_primitive_matrices)
         return 1;
+
+    if (!prev->num_primitive_matrices)
+        return 0;
 
     for (channel = 0; channel < MAX_CHANNELS; channel++)
         if (prev->frac_bits[channel] != dp->frac_bits[channel])
