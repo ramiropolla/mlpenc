@@ -257,6 +257,8 @@ static void clear_decoding_params(DecodingParams decoding_params[MAX_SUBSTREAMS]
         dp->num_primitive_matrices = 0;
         dp->blocksize              = 8;
 
+        memset(dp->frac_bits      , 0, sizeof(dp->frac_bits      ));
+        memset(dp->matrix_coeff   , 0, sizeof(dp->matrix_coeff   ));
         memset(dp->output_shift   , 0, sizeof(dp->output_shift   ));
         memset(dp->quant_step_size, 0, sizeof(dp->quant_step_size));
     }
