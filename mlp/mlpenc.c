@@ -61,6 +61,9 @@ typedef struct {
     //! number of matrices to apply
     uint8_t         num_primitive_matrices;
 
+    int32_t         matrix_coeff[MAX_MATRICES][MAX_CHANNELS+2];
+    uint8_t         frac_bits[MAX_CHANNELS];
+
     //! Left shift to apply to decoded PCM values to get final 24-bit output.
     int8_t          output_shift[MAX_CHANNELS];
 
@@ -1071,6 +1074,25 @@ static int compare_filter_params(FilterParams *prev, FilterParams *fp)
     return 0;
 }
 
+static int compare_primitive_matrices(DecodingParams *prev, DecodingParams *dp)
+{
+    unsigned int channel, mat;
+
+    if (dp->num_primitive_matrices != dp->num_primitive_matrices)
+        return 1;
+
+    for (channel = 0; channel < MAX_CHANNELS; channel++)
+        if (prev->frac_bits[channel] != dp->frac_bits[channel])
+            return 1;
+
+    for (mat = 0; mat < MAX_MATRICES; mat++)
+        for (channel = 0; channel < MAX_CHANNELS + 2; channel++)
+            if (prev->matrix_coeff[mat][channel] != dp->matrix_coeff[mat][channel])
+                return 1;
+
+    return 0;
+}
+
 /** Compares two DecodingParams and ChannelParams structures to decide if a
  *  new decoding params header has to be written.
  */
@@ -1089,7 +1111,7 @@ static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
     if (prev->blocksize != dp->blocksize)
         retval |= PARAM_BLOCKSIZE;
 
-    if (prev->num_primitive_matrices != dp->num_primitive_matrices)
+    if (compare_primitive_matrices(prev, dp))
         retval |= PARAM_MATRIX;
 
     for (ch = 0; ch <= rh->max_matrix_channel; ch++)
