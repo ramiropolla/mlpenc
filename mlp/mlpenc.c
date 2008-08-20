@@ -1,4 +1,4 @@
-/*
+/**
  * MLP encoder
  * Copyright (c) 2008 Ramiro Polla <ramiro@lisha.ufsc.br>
  *
