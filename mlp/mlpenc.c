@@ -33,42 +33,30 @@
 #define MLP_MAX_LPC_SHIFT     16
 
 typedef struct {
-    //! The index of the first channel coded in this substream.
-    uint8_t         min_channel;
-    //! The index of the last channel coded in this substream.
-    uint8_t         max_channel;
-    //! The number of channels input into the rematrix stage.
-    uint8_t         max_matrix_channel;
+    uint8_t         min_channel;         ///< The index of the first channel coded in this substream.
+    uint8_t         max_channel;         ///< The index of the last channel coded in this substream.
+    uint8_t         max_matrix_channel;  ///< The number of channels input into the rematrix stage.
 
-    //! The left shift applied to random noise in 0x31ea substreams.
-    uint8_t         noise_shift;
-    //! The current seed value for the pseudorandom noise generator(s).
-    uint32_t        noisegen_seed;
+    uint8_t         noise_shift;         ///< The left shift applied to random noise in 0x31ea substreams.
+    uint32_t        noisegen_seed;       ///< The current seed value for the pseudorandom noise generator(s).
 
-    //! Set if the substream contains extra info to check the size of VLC blocks.
-    int             data_check_present;
+    int             data_check_present;  ///< Set if the substream contains extra info to check the size of VLC blocks.
 
-    //! XOR of all output samples
-    int32_t         lossless_check_data;
+    int32_t         lossless_check_data; ///< XOR of all output samples
 } RestartHeader;
 
 typedef struct {
-    //! number of PCM samples in current audio block
-    uint16_t        blocksize;
-    //! left shift to apply to Huffman-decoded residuals
-    uint8_t         quant_step_size[MAX_CHANNELS];
+    uint16_t        blocksize;              ///< number of PCM samples in current audio block
+    uint8_t         quant_step_size[MAX_CHANNELS];  ///< left shift to apply to Huffman-decoded residuals
 
-    //! number of matrices to apply
-    uint8_t         num_primitive_matrices;
+    uint8_t         num_primitive_matrices; ///< number of matrices to apply
 
     int32_t         matrix_coeff[MAX_MATRICES][MAX_CHANNELS+2];
     uint8_t         frac_bits[MAX_CHANNELS];
 
-    //! Left shift to apply to decoded PCM values to get final 24-bit output.
-    int8_t          output_shift[MAX_CHANNELS];
+    int8_t          output_shift[MAX_CHANNELS]; ///< Left shift to apply to decoded PCM values to get final 24-bit output.
 
-    //! Bitmask of which parameter sets are conveyed in a decoding parameter block.
-    uint8_t         param_presence_flags;
+    uint8_t         param_presence_flags;       ///< Bitmask of which parameter sets are conveyed in a decoding parameter block.
 #define PARAM_PRESENCE_FLAGS    (1 << 8)
 
 #define PARAMS_DEFAULT      (0xFF)
@@ -88,8 +76,7 @@ typedef struct {
 typedef struct {
     AVCodecContext *avctx;
 
-    //! Number of substreams contained within this stream.
-    int             num_substreams;
+    int             num_substreams; ///< Number of substreams contained within this stream.
 
     int             num_channels;   /**< Number of channels in major_frame_buffer.
                                      *   Normal channels + noise channels. */
