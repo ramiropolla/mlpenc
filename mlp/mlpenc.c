@@ -421,10 +421,9 @@ static int inline number_sbits(int number)
  *  losing any precision.
  */
 static void code_filter_coeffs(MLPEncodeContext *ctx,
-                               unsigned int channel, unsigned int filter,
+                               FilterParams *fp,
                                int *pcoeff_shift, int *pcoeff_bits)
 {
-    FilterParams *fp = &ctx->channel_params[channel].filter_params[filter];
     int min = INT_MAX, max = INT_MIN;
     int bits, shift;
     int or = 0;
@@ -462,7 +461,7 @@ static void write_filter_params(MLPEncodeContext *ctx, PutBitContext *pb,
         int coeff_bits;
         int i;
 
-        code_filter_coeffs(ctx, channel, filter, &coeff_shift, &coeff_bits);
+        code_filter_coeffs(ctx, fp, &coeff_shift, &coeff_bits);
 
         put_bits(pb, 4, fp->shift  );
         put_bits(pb, 5, coeff_bits );
