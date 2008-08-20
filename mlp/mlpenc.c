@@ -228,7 +228,7 @@ static void write_restart_header(MLPEncodeContext *ctx,
  *  TODO This field is not yet fully understood. These values are just copied
  *       from some samples out in the wild.
  */
-static uint8_t code_channels3(int channels)
+static uint8_t get_channels3_code(int channels)
 {
     switch (channels) {
     case 1: return 0x1f;
@@ -365,7 +365,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
      * we only accept mono and stereo. */
     ctx->mlp_channels   = avctx->channels - 1;
     ctx->mlp_channels2  = (1 << avctx->channels) - 1;
-    ctx->mlp_channels3  = code_channels3(avctx->channels);
+    ctx->mlp_channels3  = get_channels3_code(avctx->channels);
     ctx->num_substreams = 1;
 
     frame_size_size = sizeof(unsigned int)
