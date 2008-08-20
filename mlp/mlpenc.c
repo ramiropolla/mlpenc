@@ -121,9 +121,11 @@ typedef struct {
 #define SYNC_MLP        0xbb
 #define SYNC_TRUEHD     0xba
 
-#define BITS_16         0x0
-#define BITS_20         0x1
-#define BITS_24         0x2
+enum InputBitDepth {
+    BITS_16,
+    BITS_20,
+    BITS_24,
+};
 
 /** Returns the coded sample_rate for MLP. */
 static int mlp_sample_rate(int sample_rate)
