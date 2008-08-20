@@ -1209,7 +1209,7 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 }
 
 /** Compares two FilterParams structures and returns 1 if anything has
- *  changes. Returns 0 if they are both equal.
+ *  changed. Returns 0 if they are both equal.
  */
 static int compare_filter_params(FilterParams *prev, FilterParams *fp)
 {
