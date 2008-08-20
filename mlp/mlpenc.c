@@ -84,23 +84,23 @@ typedef struct {
     int             sample_fmt;     ///< sample format encoded for MLP
     int             sample_rate;    ///< sample rate encoded for MLP
 
-    int32_t        *sample_buffer;
-    int32_t        *major_frame_buffer;
-    int32_t        *last_frame;
+    int32_t        *sample_buffer;  ///< Pointer to current access unit samples.
+    int32_t        *major_frame_buffer; ///< Buffer with all data for one entire major frame interval.
+    int32_t        *last_frame;     ///< Pointer to last frame with data to encode.
 
-    unsigned int    major_frame_size;
-    unsigned int    next_major_frame_size;
+    unsigned int    major_frame_size;   ///< Number of samples in current major frame being encoded.
+    unsigned int    next_major_frame_size;  ///< Counter of number of samples for next major frame.
 
-    int32_t        *lossless_check_data;
+    int32_t        *lossless_check_data;    ///< Array with lossless_check_data for each access unit.
 
-    unsigned int   *frame_size;
-    unsigned int    frame_index;
+    unsigned int   *frame_size;         ///< Array with number of samples/channel in each access unit.
+    unsigned int    frame_index;        ///< Index of current frame being encoded.
 
-    unsigned int    one_sample_buffer_size;
+    unsigned int    one_sample_buffer_size; ///< Number of samples*channel for one access unit.
 
-    unsigned int    major_header_interval;
+    unsigned int    major_header_interval;  ///< Interval of access units in between two major frames.
 
-    uint16_t        timestamp;
+    uint16_t        timestamp;      ///< Timestamp of current access unit.
 
     uint8_t         mlp_channels;   ///< channel arrangement for MLP streams
 
@@ -234,6 +234,7 @@ static uint8_t code_channels3(int channels)
     }
 }
 
+/** Clears a DecodingParams struct the way it should be after a restart header. */
 static void clear_decoding_params(DecodingParams decoding_params[MAX_SUBSTREAMS])
 {
     unsigned int substr;
@@ -252,6 +253,7 @@ static void clear_decoding_params(DecodingParams decoding_params[MAX_SUBSTREAMS]
     }
 }
 
+/** Clears a ChannelParams struct the way it should be after a restart header. */
 static void clear_channel_params(ChannelParams channel_params[MAX_CHANNELS])
 {
     unsigned int channel;
@@ -268,6 +270,7 @@ static void clear_channel_params(ChannelParams channel_params[MAX_CHANNELS])
     }
 }
 
+/** Sets default vales in our encoder for a DecodingParams struct. */
 static void default_decoding_params(MLPEncodeContext *ctx,
      DecodingParams decoding_params[MAX_SUBSTREAMS])
 {
@@ -466,6 +469,7 @@ static void write_filter_params(MLPEncodeContext *ctx, PutBitContext *pb,
     }
 }
 
+/** Writes matrix params for all primitive matrices to the bitstream. */
 static void write_matrix_params(MLPEncodeContext *ctx, PutBitContext *pb,
                                 unsigned int substr)
 {
@@ -641,6 +645,7 @@ static void input_data(MLPEncodeContext *ctx, void *samples)
         input_data_internal(ctx, samples, 0);
 }
 
+/** Counts the number of trailing zeroes in a value */
 static int number_trailing_zeroes(int32_t sample)
 {
     int bits;
@@ -655,6 +660,9 @@ static int number_trailing_zeroes(int32_t sample)
     return bits;
 }
 
+/** Determines how many bits are zero at the end of all samples so they can be
+ *  shifted out for the huffman coder.
+ */
 static void determine_quant_step_size(MLPEncodeContext *ctx, unsigned int substr)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
@@ -787,6 +795,7 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
     return 0;
 }
 
+/** Generates two noise channels worth of data. */
 static void generate_2_noise_channels(MLPEncodeContext *ctx, unsigned int substr)
 {
     int32_t *sample_buffer = ctx->sample_buffer + ctx->num_channels - 2;
@@ -807,6 +816,9 @@ static void generate_2_noise_channels(MLPEncodeContext *ctx, unsigned int substr
     rh->noisegen_seed = seed & ((1 << 24)-1);
 }
 
+/** Determines how many fractional bits are needed to encode matrix
+ *  coefficients. Also shifts the coefficients to fit within 2.14 bits.
+ */
 static int code_matrix_coeffs(MLPEncodeContext *ctx,
                                unsigned int substr, unsigned int mat)
 {
@@ -851,6 +863,7 @@ static int code_matrix_coeffs(MLPEncodeContext *ctx,
     return ctx->num_channels - 3;
 }
 
+/** Determines best coefficients to use for the lossless matrix. */
 static void lossless_matrix_coeffs(MLPEncodeContext *ctx, unsigned int substr)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
@@ -867,6 +880,9 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx, unsigned int substr)
     dp->num_primitive_matrices = code_matrix_coeffs(ctx, substr, 1);
 }
 
+/** Applies output_shift to all channels when it is needed because of shifted
+ *  matrix coefficients.
+ */
 static void output_shift_channels(MLPEncodeContext *ctx, unsigned int substr)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
@@ -884,6 +900,7 @@ static void output_shift_channels(MLPEncodeContext *ctx, unsigned int substr)
     }
 }
 
+/** Rematrixes all channels using chosen coefficients. */
 static void rematrix_channels(MLPEncodeContext *ctx, unsigned int substr)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
@@ -1214,6 +1231,9 @@ static int compare_filter_params(FilterParams *prev, FilterParams *fp)
     return 0;
 }
 
+/** Compare two primitive matrices and returns 1 if anything has changed.
+ *  Returns 0 if they are both equal.
+ */
 static int compare_primitive_matrices(DecodingParams *prev, DecodingParams *dp)
 {
     unsigned int channel, mat;
