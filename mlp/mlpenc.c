@@ -1204,7 +1204,7 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
             sample -= sign_huff_offset[ch];
 
             if (codebook[ch] >= 0) {
-                int8_t vlc = sample >> lsb_bits[ch];
+                int vlc = sample >> lsb_bits[ch];
                 put_bits(pb, ff_mlp_huffman_tables[codebook[ch]][vlc][1],
                              ff_mlp_huffman_tables[codebook[ch]][vlc][0]);
             }
