@@ -281,21 +281,6 @@ static void clear_channel_params(ChannelParams channel_params[MAX_CHANNELS])
     }
 }
 
-static uint8_t default_param_presence_flags()
-{
-    uint8_t param_presence_flags = 0;
-
-    param_presence_flags |= PARAM_BLOCKSIZE;
-    param_presence_flags |= PARAM_MATRIX;
-    param_presence_flags |= PARAM_OUTSHIFT;
-    param_presence_flags |= PARAM_QUANTSTEP;
-    param_presence_flags |= PARAM_FIR;
-/*  param_presence_flags |= PARAM_IIR; */
-    param_presence_flags |= PARAM_HUFFOFFSET;
-
-    return param_presence_flags;
-}
-
 static void default_decoding_params(MLPEncodeContext *ctx,
      DecodingParams decoding_params[MAX_SUBSTREAMS])
 {
@@ -305,9 +290,19 @@ static void default_decoding_params(MLPEncodeContext *ctx,
 
     for (substr = 0; substr < MAX_SUBSTREAMS; substr++) {
         DecodingParams *dp = &decoding_params[substr];
+        uint8_t param_presence_flags = 0;
 
         dp->num_primitive_matrices = ctx->avctx->channels - 1;
-        dp->param_presence_flags = default_param_presence_flags();
+
+        param_presence_flags |= PARAM_BLOCKSIZE;
+        param_presence_flags |= PARAM_MATRIX;
+        param_presence_flags |= PARAM_OUTSHIFT;
+        param_presence_flags |= PARAM_QUANTSTEP;
+        param_presence_flags |= PARAM_FIR;
+/*      param_presence_flags |= PARAM_IIR; */
+        param_presence_flags |= PARAM_HUFFOFFSET;
+
+        dp->param_presence_flags = param_presence_flags;
     }
 }
 
