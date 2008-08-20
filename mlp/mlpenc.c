@@ -287,7 +287,7 @@ static uint8_t default_param_presence_flags()
 
     param_presence_flags |= PARAM_BLOCKSIZE;
     param_presence_flags |= PARAM_MATRIX;
-/*  param_presence_flags |= PARAM_OUTSHIFT; */
+    param_presence_flags |= PARAM_OUTSHIFT;
     param_presence_flags |= PARAM_QUANTSTEP;
     param_presence_flags |= PARAM_FIR;
 /*  param_presence_flags |= PARAM_IIR; */
@@ -853,21 +853,18 @@ static int code_matrix_coeffs(MLPEncodeContext *ctx,
     shift = FFMAX(0, FFMAX(number_sbits(min), number_sbits(max)) - 16);
 
     if (shift) {
-#if 1
         for (channel = 0; channel < ctx->num_channels; channel++)
             dp->matrix_coeff[mat][channel] >>= shift;
 
         coeff_mask >>= shift;
-#else
-        /* I can't get output_shift to work yet. */
-        return 0;
-#endif
     }
 
     for (bits = 0; bits < 14 && !(coeff_mask & (1<<bits)); bits++);
 
     dp->frac_bits   [mat] = 14 - bits;
-    dp->output_shift[mat] = shift;
+
+    for (channel = 0; channel < ctx->num_channels; channel++)
+        dp->output_shift[channel] = shift;
 
     return ctx->num_channels - 3;
 }
@@ -886,6 +883,23 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx, unsigned int substr)
     dp->matrix_coeff[1][3] =  0 << 14;
 
     dp->num_primitive_matrices = code_matrix_coeffs(ctx, substr, 1);
+}
+
+static void output_shift_channels(MLPEncodeContext *ctx, unsigned int substr)
+{
+    DecodingParams *dp = &ctx->decoding_params[substr];
+    int32_t *sample_buffer = ctx->sample_buffer;
+    unsigned int i;
+
+    for (i = 0; i < ctx->major_frame_size; i++) {
+        unsigned int channel;
+
+        for (channel = 0; channel < ctx->num_channels - 2; channel++) {
+            *sample_buffer++ >>= dp->output_shift[channel];
+        }
+
+        sample_buffer += 2;
+    }
 }
 
 static void rematrix_channels(MLPEncodeContext *ctx, unsigned int substr)
@@ -1537,6 +1551,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
         for (substr = 0; substr < ctx->num_substreams; substr++) {
             lossless_matrix_coeffs   (ctx, substr);
+            output_shift_channels    (ctx, substr);
             rematrix_channels        (ctx, substr);
             determine_quant_step_size(ctx, substr);
         }
