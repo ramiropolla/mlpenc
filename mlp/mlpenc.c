@@ -286,7 +286,7 @@ static uint8_t default_param_presence_flags()
     uint8_t param_presence_flags = 0;
 
     param_presence_flags |= PARAM_BLOCKSIZE;
-/*  param_presence_flags |= PARAM_MATRIX; */
+    param_presence_flags |= PARAM_MATRIX;
 /*  param_presence_flags |= PARAM_OUTSHIFT; */
     param_presence_flags |= PARAM_QUANTSTEP;
     param_presence_flags |= PARAM_FIR;
@@ -306,6 +306,7 @@ static void default_decoding_params(MLPEncodeContext *ctx,
     for (substr = 0; substr < MAX_SUBSTREAMS; substr++) {
         DecodingParams *dp = &decoding_params[substr];
 
+        dp->num_primitive_matrices = ctx->avctx->channels - 1;
         dp->param_presence_flags = default_param_presence_flags();
     }
 }
@@ -390,6 +391,9 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         RestartHeader  *rh = &ctx->restart_header [substr];
+
+        /* TODO see if noisegen_seed is really worth it. */
+        rh->noisegen_seed      = 0;
 
         rh->min_channel        = 0;
         rh->max_channel        = avctx->channels - 1;
@@ -480,6 +484,37 @@ static void write_filter_params(MLPEncodeContext *ctx, PutBitContext *pb,
     }
 }
 
+static void write_matrix_params(MLPEncodeContext *ctx, PutBitContext *pb,
+                                unsigned int substr)
+{
+    DecodingParams *dp = &ctx->decoding_params[substr];
+    unsigned int mat;
+
+    put_bits(pb, 4, dp->num_primitive_matrices);
+
+    for (mat = 1; mat <= dp->num_primitive_matrices; mat++) {
+        unsigned int channel;
+
+        put_bits(pb, 4, mat               ); /* matrix_out_ch */
+        put_bits(pb, 4, dp->frac_bits[mat]);
+        put_bits(pb, 1, 0                 ); /* lsb_bypass */
+
+        for (channel = 0; channel < ctx->num_channels; channel++) {
+            int32_t coeff = dp->matrix_coeff[mat][channel];
+
+            if (coeff) {
+                put_bits(pb, 1, 1);
+
+                coeff >>= 14 - dp->frac_bits[mat];
+
+                put_sbits(pb, dp->frac_bits[mat] + 2, coeff);
+            } else {
+                put_bits(pb, 1, 0);
+            }
+        }
+    }
+}
+
 /** Writes decoding parameters to the bitstream. These change very often,
  *  usually at almost every frame.
  */
@@ -510,12 +545,7 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
     if (dp->param_presence_flags & PARAM_MATRIX) {
         if (params_changed       & PARAM_MATRIX) {
             put_bits(pb, 1, 1);
-#if 1
-            put_bits(pb, 4, 0);
-#else
-            /* TODO no primitive matrices yet. */
-            put_bits(pb, 4, dp->num_primitive_matrices);
-#endif
+            write_matrix_params(ctx, pb, substr);
         } else {
             put_bits(pb, 1, 0);
         }
@@ -773,6 +803,117 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
     }
 
     return 0;
+}
+
+static void generate_2_noise_channels(MLPEncodeContext *ctx, unsigned int substr)
+{
+    int32_t *sample_buffer = ctx->sample_buffer + ctx->num_channels - 2;
+    RestartHeader *rh = &ctx->restart_header[substr];
+    unsigned int i;
+    uint32_t seed = rh->noisegen_seed;
+
+    for (i = 0; i < ctx->major_frame_size; i++) {
+        uint16_t seed_shr7 = seed >> 7;
+        *sample_buffer++ = ((int8_t)(seed >> 15)) << rh->noise_shift;
+        *sample_buffer++ = ((int8_t) seed_shr7)   << rh->noise_shift;
+
+        seed = (seed << 16) ^ seed_shr7 ^ (seed_shr7 << 5);
+
+        sample_buffer += ctx->num_channels - 2;
+    }
+
+    rh->noisegen_seed = seed & ((1 << 24)-1);
+}
+
+static int code_matrix_coeffs(MLPEncodeContext *ctx,
+                               unsigned int substr, unsigned int mat)
+{
+    DecodingParams *dp = &ctx->decoding_params[substr];
+    int32_t min = INT32_MAX, max = INT32_MIN;
+    int32_t coeff_mask = 0;
+    unsigned int channel;
+    unsigned int shift;
+    unsigned int bits;
+
+    /* No decorrelation for mono. */
+    if (ctx->num_channels - 2 == 1)
+        return 0;
+
+    for (channel = 0; channel < ctx->num_channels; channel++) {
+        int32_t coeff = dp->matrix_coeff[mat][channel];
+
+        if (coeff < min)
+            min = coeff;
+        if (coeff > max)
+            max = coeff;
+
+        coeff_mask |= coeff;
+    }
+
+    shift = FFMAX(0, FFMAX(number_sbits(min), number_sbits(max)) - 16);
+
+    if (shift) {
+#if 1
+        for (channel = 0; channel < ctx->num_channels; channel++)
+            dp->matrix_coeff[mat][channel] >>= shift;
+
+        coeff_mask >>= shift;
+#else
+        /* I can't get output_shift to work yet. */
+        return 0;
+#endif
+    }
+
+    for (bits = 0; bits < 14 && !(coeff_mask & (1<<bits)); bits++);
+
+    dp->frac_bits   [mat] = 14 - bits;
+    dp->output_shift[mat] = shift;
+
+    return ctx->num_channels - 3;
+}
+
+static void lossless_matrix_coeffs(MLPEncodeContext *ctx, unsigned int substr)
+{
+    DecodingParams *dp = &ctx->decoding_params[substr];
+
+    generate_2_noise_channels(ctx, substr);
+
+    /* TODO actual decorrelation. */
+
+    dp->matrix_coeff[1][0] =  1 << 14;
+    dp->matrix_coeff[1][1] = -1 << 14;
+    dp->matrix_coeff[1][2] =  0 << 14;
+    dp->matrix_coeff[1][3] =  0 << 14;
+
+    dp->num_primitive_matrices = code_matrix_coeffs(ctx, substr, 1);
+}
+
+static void rematrix_channels(MLPEncodeContext *ctx, unsigned int substr)
+{
+    DecodingParams *dp = &ctx->decoding_params[substr];
+    int32_t *sample_buffer = ctx->sample_buffer;
+    unsigned int mat, i, maxchan;
+
+    maxchan = ctx->num_channels;
+
+    for (mat = 1; mat <= dp->num_primitive_matrices; mat++) {
+        unsigned int msb_mask_bits = (ctx->avctx->sample_fmt == SAMPLE_FMT_S16 ? 8 : 0) - dp->output_shift[mat];
+        int32_t mask = MSB_MASK(msb_mask_bits);
+
+        sample_buffer = ctx->sample_buffer;
+        for (i = 0; i < ctx->major_frame_size; i++) {
+            unsigned int src_ch;
+            int64_t accum = 0;
+
+            for (src_ch = 0; src_ch < maxchan; src_ch++) {
+                int32_t sample = *(sample_buffer + src_ch);
+                accum += (int64_t) sample * dp->matrix_coeff[mat][src_ch];
+            }
+            sample_buffer[mat] = (accum >> 14) & mask;
+
+            sample_buffer += ctx->num_channels;
+        }
+    }
 }
 
 /** Min and max values that can be encoded with each codebook. The values for
@@ -1395,6 +1536,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         ctx->next_major_frame_size = 0;
 
         for (substr = 0; substr < ctx->num_substreams; substr++) {
+            lossless_matrix_coeffs   (ctx, substr);
+            rematrix_channels        (ctx, substr);
             determine_quant_step_size(ctx, substr);
         }
 
