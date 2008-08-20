@@ -969,9 +969,9 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     /* Set offset inside huffoffset's boundaries by adjusting extremes
      * so that more bits are used, thus shifting the offset. */
     if (min < HUFF_OFFSET_MIN)
-        max = FFMAX(max, HUFF_OFFSET_MIN + HUFF_OFFSET_MIN - min + 1);
+        max = FFMAX(max, 2 * HUFF_OFFSET_MIN - min + 1);
     if (max > HUFF_OFFSET_MAX)
-        min = FFMIN(min, HUFF_OFFSET_MAX + HUFF_OFFSET_MAX - max - 1);
+        min = FFMIN(min, 2 * HUFF_OFFSET_MAX - max - 1);
 
     /* Determine offset and minimum number of bits. */
     diff = max - min;
