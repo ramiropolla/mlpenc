@@ -338,7 +338,10 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     ctx->num_channels = avctx->channels + 2; /* +2 noise channels */
     ctx->one_sample_buffer_size = avctx->frame_size
                                 * ctx->num_channels;
+    /* TODO Let user pass major header interval as parameter. */
     ctx->major_header_interval = MAJOR_HEADER_INTERVAL;
+
+    /* TODO Let user pass parameters for LPC filter. */
 
     major_frame_buffer_size = ctx->one_sample_buffer_size
                            * ctx->major_header_interval * sizeof(int32_t);
