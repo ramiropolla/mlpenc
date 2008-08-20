@@ -46,7 +46,7 @@ typedef struct {
 } RestartHeader;
 
 typedef struct {
-    uint16_t        blocksize;              ///< number of PCM samples in current audio block
+    unsigned int    blocksize;              ///< number of PCM samples in current audio block
     uint8_t         quant_step_size[MAX_CHANNELS];  ///< left shift to apply to Huffman-decoded residuals
 
     uint8_t         num_primitive_matrices; ///< number of matrices to apply
