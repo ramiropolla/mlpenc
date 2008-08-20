@@ -224,7 +224,10 @@ static void write_restart_header(MLPEncodeContext *ctx,
     put_bits(pb,  8, checksum);
 }
 
-/** Encodes the third type of channel information for the sync headers. */
+/** Encodes the third type of channel information for the sync headers.
+ *  TODO This field is not yet fully understood. These values are just copied
+ *       from some samples out in the wild.
+ */
 static uint8_t code_channels3(int channels)
 {
     switch (channels) {
