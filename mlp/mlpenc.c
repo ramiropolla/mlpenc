@@ -1192,9 +1192,9 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 
         sign_shift = lsb_bits[ch] - 1;
 
-        if (codebook_index[ch] >= 0) {
+        if (cp->codebook > 0) {
             sign_huff_offset[ch] -= 7 << lsb_bits[ch];
-            sign_shift += 2 - codebook_index[ch];
+            sign_shift += 3 - cp->codebook;
         }
 
         /* Unsign if needed. */
