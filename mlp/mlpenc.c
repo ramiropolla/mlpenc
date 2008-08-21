@@ -745,19 +745,18 @@ static void set_filter_params(MLPEncodeContext *ctx,
 
 #define MSB_MASK(bits)  (-1u << bits)
 
-/* TODO What substream to use for applying filters to channel? */
-
 /** Applies the filter to the current samples, and saves the residual back
  *  into the samples buffer. If the filter is too bad and overflows the
  *  maximum amount of bits allowed (24), the samples buffer is left as is and
  *  the function returns -1.
  */
-static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
+static int apply_filter(MLPEncodeContext *ctx, unsigned int substr,
+                        unsigned int channel)
 {
     FilterParams *fp[NUM_FILTERS] = { &ctx->channel_params[channel].filter_params[FIR],
                                       &ctx->channel_params[channel].filter_params[IIR], };
     int32_t filter_state_buffer[NUM_FILTERS][ctx->major_frame_size];
-    int32_t mask = MSB_MASK(ctx->decoding_params[0].quant_step_size[channel]);
+    int32_t mask = MSB_MASK(ctx->decoding_params[substr].quant_step_size[channel]);
     int32_t *sample_buffer = ctx->sample_buffer + channel;
     unsigned int major_frame_size = ctx->major_frame_size;
     unsigned int filter_shift = fp[FIR]->shift;
@@ -1365,19 +1364,20 @@ static void write_frame_headers(MLPEncodeContext *ctx, uint8_t *frame_header,
  *  buffer if the filter is good enough. Sets the filter data to be cleared if
  *  no good filter was found.
  */
-static void determine_filters(MLPEncodeContext *ctx)
+static void determine_filters(MLPEncodeContext *ctx, unsigned int substr)
 {
+    RestartHeader *rh = &ctx->restart_header[substr];
     int channel, filter;
 
-    for (channel = 0; channel < ctx->avctx->channels; channel++) {
+    for (channel = rh->min_channel; channel <= rh->max_channel; channel++) {
         for (filter = 0; filter < NUM_FILTERS; filter++)
             set_filter_params(ctx, channel, filter, 0);
-        if (apply_filter(ctx, channel) < 0) {
+        if (apply_filter(ctx, substr, channel) < 0) {
             /* Filter is horribly wrong.
              * Clear filter params and update state. */
             set_filter_params(ctx, channel, FIR, 1);
             set_filter_params(ctx, channel, IIR, 1);
-            apply_filter(ctx, channel);
+            apply_filter(ctx, substr, channel);
         }
     }
 }
@@ -1565,9 +1565,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             output_shift_channels    (ctx, substr);
             rematrix_channels        (ctx, substr);
             determine_quant_step_size(ctx, substr);
+            determine_filters        (ctx, substr);
         }
-
-        determine_filters(ctx);
     } else {
         memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
         memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
