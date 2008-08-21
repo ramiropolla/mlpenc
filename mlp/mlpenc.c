@@ -1568,6 +1568,9 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             determine_filters        (ctx, substr);
         }
     } else {
+        /* TODO Should these be a (DecodingParams *) in the context instead of
+         * memcpy'ing things around?
+         */
         memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
         memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
     }
