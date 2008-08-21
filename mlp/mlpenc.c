@@ -338,7 +338,6 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 
     avctx->frame_size  = 40 << (ctx->mlp_sample_rate & 0x7);
     avctx->coded_frame = avcodec_alloc_frame();
-    avctx->coded_frame->key_frame  = 1;
 
     ctx->num_channels = avctx->channels + 2; /* +2 noise channels */
     ctx->one_sample_buffer_size = avctx->frame_size
@@ -1567,12 +1566,16 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             determine_quant_step_size(ctx, substr);
             determine_filters        (ctx, substr);
         }
+
+        avctx->coded_frame->key_frame = 1;
     } else {
         /* TODO Should these be a (DecodingParams *) in the context instead of
          * memcpy'ing things around?
          */
         memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
         memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
+
+        avctx->coded_frame->key_frame = 0;
     }
 
     buf1 = buf;
