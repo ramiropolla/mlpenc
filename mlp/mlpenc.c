@@ -1458,6 +1458,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
                 } else {
                     ctx->sample_buffer += ctx->num_channels * dp->blocksize;
 
+                    memcpy(decoding_params, ctx->decoding_params[ctx->frame_index][ctx->subblock_index], sizeof(ctx->decoding_params[ctx->frame_index][ctx->subblock_index]));
                     memcpy(channel_params, ctx->channel_params[ctx->frame_index][ctx->subblock_index], sizeof(ctx->channel_params[ctx->frame_index][ctx->subblock_index]));
 
                     ctx->subblock_index = 1;
