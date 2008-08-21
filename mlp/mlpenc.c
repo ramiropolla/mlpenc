@@ -88,6 +88,8 @@ typedef struct {
     int32_t        *major_frame_buffer;     ///< Buffer with all data for one entire major frame interval.
     int32_t        *last_frame;             ///< Pointer to last frame with data to encode.
 
+    int32_t        *lpc_sample_buffer;
+
     unsigned int    major_frame_size;       ///< Number of samples in current major frame being encoded.
     unsigned int    next_major_frame_size;  ///< Counter of number of samples for next major frame.
 
@@ -306,6 +308,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     MLPEncodeContext *ctx = avctx->priv_data;
     unsigned int major_frame_buffer_size;
     unsigned int lossless_check_data_size;
+    unsigned int lpc_sample_buffer_size;
     unsigned int frame_size_size;
     unsigned int substr;
 
@@ -346,6 +349,16 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     ctx->major_header_interval = MAJOR_HEADER_INTERVAL;
 
     /* TODO Let user pass parameters for LPC filter. */
+
+    lpc_sample_buffer_size = avctx->frame_size
+                           * ctx->major_header_interval * sizeof(int32_t);
+
+    ctx->lpc_sample_buffer = av_malloc(lpc_sample_buffer_size);
+    if (!ctx->lpc_sample_buffer) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Not enough memory for buffering samples.\n");
+        return -1;
+    }
 
     major_frame_buffer_size = ctx->one_sample_buffer_size
                             * ctx->major_header_interval * sizeof(int32_t);
@@ -705,15 +718,7 @@ static void set_filter_params(MLPEncodeContext *ctx,
     if (filter == FIR) {
         int32_t *sample_buffer = ctx->sample_buffer + channel;
         int32_t coefs[MAX_LPC_ORDER][MAX_LPC_ORDER];
-        /* TODO Should ctx->major_frame_buffer be reorded in channels, so that
-         *      this buffer becomes unnecessary (but then every access to the
-         *      same offset in all channels will span over several Kbs), or
-         *      should this be a new buffer allocated in the context, or...?
-         *      If it stays on the stack, there will be a limit to
-         *      major_header_interval.
-         */
-        int32_t samples[ctx->major_frame_size];
-        int32_t *lpc_samples = samples;
+        int32_t *lpc_samples = ctx->lpc_sample_buffer;
         int shift[MLP_MAX_LPC_ORDER];
         unsigned int i;
         int order;
@@ -723,7 +728,7 @@ static void set_filter_params(MLPEncodeContext *ctx,
             sample_buffer += ctx->num_channels;
         }
 
-        order = ff_lpc_calc_coefs(&ctx->dsp, samples, ctx->major_frame_size,
+        order = ff_lpc_calc_coefs(&ctx->dsp, ctx->lpc_sample_buffer, ctx->major_frame_size,
                                   MLP_MIN_LPC_ORDER, MLP_MAX_LPC_ORDER, 7,
                                   coefs, shift, 1,
                                   ORDER_METHOD_EST, MLP_MAX_LPC_SHIFT, 0);
@@ -1622,6 +1627,7 @@ static av_cold int mlp_encode_close(AVCodecContext *avctx)
 
     av_freep(&ctx->lossless_check_data);
     av_freep(&ctx->major_frame_buffer);
+    av_freep(&ctx->lpc_sample_buffer);
     av_freep(&avctx->coded_frame);
     av_freep(&ctx->frame_size);
 
