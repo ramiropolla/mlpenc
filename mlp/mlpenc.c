@@ -1267,7 +1267,7 @@ static int compare_primitive_matrices(DecodingParams *prev, DecodingParams *dp)
 /** Compares two DecodingParams and ChannelParams structures to decide if a
  *  new decoding params header has to be written.
  */
-static int decoding_params_diff(MLPEncodeContext *ctx, DecodingParams *prev,
+static int compare_decoding_params(MLPEncodeContext *ctx, DecodingParams *prev,
                                 ChannelParams channel_params[MAX_CHANNELS],
                                 unsigned int substr)
 {
@@ -1436,7 +1436,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
             determine_bits(ctx, substr);
 
-            params_changed = decoding_params_diff(ctx, &decoding_params[substr],
+            params_changed = compare_decoding_params(ctx, &decoding_params[substr],
                                                 channel_params,
                                                 substr);
 
