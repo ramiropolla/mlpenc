@@ -406,14 +406,10 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
  */
 static int inline number_sbits(int number)
 {
-    int bits = 0;
+    if (number < 0)
+        number++;
 
-    if      (number > 0)
-        for (bits = 31; bits && !(number & (1<<(bits-1))); bits--);
-    else if (number < 0)
-        for (bits = 31; bits &&  (number & (1<<(bits-1))); bits--);
-
-    return bits + 1;
+    return av_log2(FFABS(number)) + 1 + !!number;
 }
 
 /** Determines the smallest number of bits needed to encode the filter
