@@ -118,7 +118,7 @@ typedef struct {
 
     ChannelParams   channel_params[MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_CHANNELS];
 
-    DecodingParams  decoding_params[MAX_SUBSTREAMS];
+    DecodingParams  decoding_params[MAJOR_HEADER_INTERVAL][MAX_SUBSTREAMS];
     RestartHeader   restart_header [MAX_SUBSTREAMS];
 
     DSPContext      dsp;
@@ -411,11 +411,12 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         rh->max_matrix_channel = 1;
     }
 
-    default_decoding_params(ctx, ctx->decoding_params);
 
-    for (index = 0; index < MAJOR_HEADER_INTERVAL; index++)
+    for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
+        default_decoding_params(ctx, ctx->decoding_params[index]);
         for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
             clear_channel_params(ctx->channel_params[index][subblock]);
+    }
 
     dsputil_init(&ctx->dsp, avctx);
 
@@ -497,7 +498,7 @@ static void write_filter_params(MLPEncodeContext *ctx, PutBitContext *pb,
 static void write_matrix_params(MLPEncodeContext *ctx, PutBitContext *pb,
                                 unsigned int substr)
 {
-    DecodingParams *dp = &ctx->decoding_params[substr];
+    DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][substr];
     unsigned int mat;
 
     put_bits(pb, 4, dp->num_primitive_matrices);
@@ -531,7 +532,7 @@ static void write_matrix_params(MLPEncodeContext *ctx, PutBitContext *pb,
 static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
                                   unsigned int substr, int params_changed)
 {
-    DecodingParams *dp = &ctx->decoding_params[substr];
+    DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
     unsigned int ch;
 
@@ -689,11 +690,10 @@ static int number_trailing_zeroes(int32_t sample)
  */
 static void determine_quant_step_size(MLPEncodeContext *ctx, unsigned int substr)
 {
-    DecodingParams *dp = &ctx->decoding_params[substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
     int32_t *sample_buffer = ctx->sample_buffer;
     int32_t sample_mask[MAX_CHANNELS];
-    unsigned int channel;
+    unsigned int channel, index;
     int i;
 
     memset(sample_mask, 0x00, sizeof(sample_mask));
@@ -705,8 +705,11 @@ static void determine_quant_step_size(MLPEncodeContext *ctx, unsigned int substr
         sample_buffer += 2; /* noise channels */
     }
 
+    for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
+        DecodingParams *dp = &ctx->decoding_params[index][substr];
     for (channel = 0; channel <= rh->max_channel; channel++)
         dp->quant_step_size[channel] = number_trailing_zeroes(sample_mask[channel]);
+    }
 }
 
 static void copy_filter_params(FilterParams *dst, FilterParams *src)
@@ -784,7 +787,7 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int substr,
     FilterParams *fp[NUM_FILTERS] = { &ctx->channel_params[ctx->frame_index][1][channel].filter_params[FIR],
                                       &ctx->channel_params[ctx->frame_index][1][channel].filter_params[IIR], };
     int32_t filter_state_buffer[NUM_FILTERS][ctx->major_frame_size];
-    int32_t mask = MSB_MASK(ctx->decoding_params[substr].quant_step_size[channel]);
+    int32_t mask = MSB_MASK(ctx->decoding_params[ctx->frame_index][substr].quant_step_size[channel]);
     int32_t *sample_buffer = ctx->sample_buffer + channel;
     unsigned int major_frame_size = ctx->major_frame_size;
     unsigned int filter_shift = fp[FIR]->shift;
@@ -856,9 +859,9 @@ static void generate_2_noise_channels(MLPEncodeContext *ctx, unsigned int substr
  *  coefficients. Also shifts the coefficients to fit within 2.14 bits.
  */
 static int code_matrix_coeffs(MLPEncodeContext *ctx,
-                              unsigned int substr, unsigned int mat)
+                              unsigned int substr, unsigned int index, unsigned int mat)
 {
-    DecodingParams *dp = &ctx->decoding_params[substr];
+    DecodingParams *dp = &ctx->decoding_params[index][substr];
     int32_t min = INT32_MAX, max = INT32_MIN;
     int32_t coeff_mask = 0;
     unsigned int channel;
@@ -902,9 +905,12 @@ static int code_matrix_coeffs(MLPEncodeContext *ctx,
 /** Determines best coefficients to use for the lossless matrix. */
 static void lossless_matrix_coeffs(MLPEncodeContext *ctx, unsigned int substr)
 {
-    DecodingParams *dp = &ctx->decoding_params[substr];
+    unsigned int index;
 
     generate_2_noise_channels(ctx, substr);
+
+    for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
+    DecodingParams *dp = &ctx->decoding_params[index][substr];
 
     /* TODO actual decorrelation. */
 
@@ -913,7 +919,8 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx, unsigned int substr)
     dp->matrix_coeff[1][2] =  0 << 14;
     dp->matrix_coeff[1][3] =  0 << 14;
 
-    dp->num_primitive_matrices = code_matrix_coeffs(ctx, substr, 1);
+    dp->num_primitive_matrices = code_matrix_coeffs(ctx, substr, index, 1);
+    }
 }
 
 /** Applies output_shift to all channels when it is needed because of shifted
@@ -921,7 +928,7 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx, unsigned int substr)
  */
 static void output_shift_channels(MLPEncodeContext *ctx, unsigned int substr)
 {
-    DecodingParams *dp = &ctx->decoding_params[substr];
+    DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][substr];
     int32_t *sample_buffer = ctx->sample_buffer;
     unsigned int i;
 
@@ -939,7 +946,7 @@ static void output_shift_channels(MLPEncodeContext *ctx, unsigned int substr)
 /** Rematrixes all channels using chosen coefficients. */
 static void rematrix_channels(MLPEncodeContext *ctx, unsigned int substr)
 {
-    DecodingParams *dp = &ctx->decoding_params[substr];
+    DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][substr];
     int32_t *sample_buffer = ctx->sample_buffer;
     unsigned int mat, i, maxchan;
 
@@ -989,7 +996,7 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                              BestOffset *bo)
 {
     ChannelParams  *cp = &ctx->channel_params[ctx->frame_index][ctx->subblock_index][channel];
-    DecodingParams *dp = &ctx->decoding_params[substr];
+    DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][substr];
     int16_t offset;
     int32_t unsign;
     uint32_t diff;
@@ -1040,7 +1047,7 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int subs
     int32_t codebook_min = codebook_extremes[codebook][0];
     int32_t codebook_max = codebook_extremes[codebook][1];
     int32_t *sample_buffer = ctx->sample_buffer + channel;
-    DecodingParams *dp = &ctx->decoding_params[substr];
+    DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][substr];
     int codebook_offset  = 7 + (2 - codebook);
     int32_t unsign_offset = offset;
     int lsb_bits = 0, bitcount = 0;
@@ -1144,7 +1151,7 @@ static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
  */
 static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
 {
-    DecodingParams *dp = &ctx->decoding_params[substr];
+    DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
     unsigned int channel;
 
@@ -1198,7 +1205,7 @@ static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
 static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
                              unsigned int substr)
 {
-    DecodingParams *dp = &ctx->decoding_params[substr];
+    DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
     int32_t *sample_buffer = ctx->sample_buffer;
     int32_t sign_huff_offset[MAX_CHANNELS];
@@ -1299,7 +1306,7 @@ static int compare_decoding_params(MLPEncodeContext *ctx, DecodingParams *prev,
                                    ChannelParams channel_params[MAX_CHANNELS],
                                    unsigned int substr)
 {
-    DecodingParams *dp = &ctx->decoding_params[substr];
+    DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
     unsigned int ch;
     int retval = 0;
@@ -1425,7 +1432,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         unsigned int subblock, num_subblocks = restart_frame;
-        DecodingParams *dp = &ctx->decoding_params[substr];
+        DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][substr];
         RestartHeader  *rh = &ctx->restart_header [substr];
         int32_t *backup_sample_buffer;
         uint8_t parity, checksum;
@@ -1606,7 +1613,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         /* TODO Should these be a (DecodingParams *) in the context instead of
          * memcpy'ing things around?
          */
-        memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
+        memcpy(decoding_params, ctx->decoding_params[ctx->prev_frame_index], sizeof(decoding_params));
         memcpy(channel_params, ctx->channel_params[ctx->prev_frame_index][ctx->subblock_index], sizeof(channel_params));
 
         avctx->coded_frame->key_frame = 0;
@@ -1616,7 +1623,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     /* Substream headers will be written at the end. */
     for (substr = 0; substr < ctx->num_substreams; substr++) {
-        DecodingParams *dp = &ctx->decoding_params[substr];
+        DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][substr];
 
         dp->blocksize = ctx->frame_size[ctx->frame_index];
 
