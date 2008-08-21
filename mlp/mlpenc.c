@@ -46,10 +46,10 @@ typedef struct {
 } RestartHeader;
 
 typedef struct {
-    uint16_t        blocksize;              ///< number of PCM samples in current audio block
+    uint16_t        blocksize;                  ///< number of PCM samples in current audio block
     uint8_t         quant_step_size[MAX_CHANNELS];  ///< left shift to apply to Huffman-decoded residuals
 
-    uint8_t         num_primitive_matrices; ///< number of matrices to apply
+    uint8_t         num_primitive_matrices;     ///< number of matrices to apply
 
     int32_t         matrix_coeff[MAX_MATRICES][MAX_CHANNELS+2];
     uint8_t         frac_bits[MAX_CHANNELS];
@@ -76,42 +76,42 @@ typedef struct {
 typedef struct {
     AVCodecContext *avctx;
 
-    int             num_substreams; ///< Number of substreams contained within this stream.
+    int             num_substreams;         ///< Number of substreams contained within this stream.
 
     int             num_channels;   /**< Number of channels in major_frame_buffer.
                                      *   Normal channels + noise channels. */
 
-    int             sample_fmt;     ///< sample format encoded for MLP
-    int             mlp_sample_rate;    ///< sample rate encoded for MLP
+    int             sample_fmt;             ///< sample format encoded for MLP
+    int             mlp_sample_rate;        ///< sample rate encoded for MLP
 
-    int32_t        *sample_buffer;  ///< Pointer to current access unit samples.
-    int32_t        *major_frame_buffer; ///< Buffer with all data for one entire major frame interval.
-    int32_t        *last_frame;     ///< Pointer to last frame with data to encode.
+    int32_t        *sample_buffer;          ///< Pointer to current access unit samples.
+    int32_t        *major_frame_buffer;     ///< Buffer with all data for one entire major frame interval.
+    int32_t        *last_frame;             ///< Pointer to last frame with data to encode.
 
-    unsigned int    major_frame_size;   ///< Number of samples in current major frame being encoded.
+    unsigned int    major_frame_size;       ///< Number of samples in current major frame being encoded.
     unsigned int    next_major_frame_size;  ///< Counter of number of samples for next major frame.
 
     int32_t        *lossless_check_data;    ///< Array with lossless_check_data for each access unit.
 
-    unsigned int   *frame_size;         ///< Array with number of samples/channel in each access unit.
-    unsigned int    frame_index;        ///< Index of current frame being encoded.
+    unsigned int   *frame_size;             ///< Array with number of samples/channel in each access unit.
+    unsigned int    frame_index;            ///< Index of current frame being encoded.
 
     unsigned int    one_sample_buffer_size; ///< Number of samples*channel for one access unit.
 
     unsigned int    major_header_interval;  ///< Interval of access units in between two major frames.
 
-    uint16_t        timestamp;      ///< Timestamp of current access unit.
+    uint16_t        timestamp;              ///< Timestamp of current access unit.
 
-    uint8_t         mlp_channels;   ///< channel arrangement for MLP streams
+    uint8_t         mlp_channels;           ///< channel arrangement for MLP streams
 
-    uint8_t         mlp_channels2;  ///< 1 bit for each channel
+    uint8_t         mlp_channels2;          ///< 1 bit for each channel
     uint8_t         mlp_channels3;  /**< TODO unknown channel-related field
                                      *   These values are correct for mono and stereo. */
 
     ChannelParams   channel_params[MAX_CHANNELS];
 
     DecodingParams  decoding_params[MAX_SUBSTREAMS];
-    RestartHeader   restart_header[MAX_SUBSTREAMS];
+    RestartHeader   restart_header [MAX_SUBSTREAMS];
 
     DSPContext      dsp;
 } MLPEncodeContext;
@@ -149,14 +149,14 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
 
     init_put_bits(&pb, buf, buf_size);
 
-    put_bits(&pb, 24, SYNC_MAJOR       );
-    put_bits(&pb,  8, SYNC_MLP         );
-    put_bits(&pb,  4, ctx->sample_fmt  );
-    put_bits(&pb,  4, ctx->sample_fmt  );
+    put_bits(&pb, 24, SYNC_MAJOR           );
+    put_bits(&pb,  8, SYNC_MLP             );
+    put_bits(&pb,  4, ctx->sample_fmt      );
+    put_bits(&pb,  4, ctx->sample_fmt      );
     put_bits(&pb,  4, ctx->mlp_sample_rate );
     put_bits(&pb,  4, ctx->mlp_sample_rate );
-    put_bits(&pb, 11, 0                ); /* This value is 0 in all tested
-                                           * MLP samples. */
+    put_bits(&pb, 11, 0                    ); /* This value is 0 in all tested
+                                               * MLP samples. */
     put_bits(&pb,  5, ctx->mlp_channels);
 
     /* These values seem to be constant for all tested MLP samples. */
@@ -177,8 +177,8 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
                                  * from samples that are stereo and have
                                  * 44100Hz. */
     put_bits(&pb,  8, ctx->mlp_channels2);
-    put_bits(&pb, 32, 0x00008080); /* These values seem */
-    put_bits(&pb,  8, 0x00      ); /* to be constants.  */
+    put_bits(&pb, 32, 0x00008080        ); /* These values seem */
+    put_bits(&pb,  8, 0x00              ); /* to be constants.  */
     put_bits(&pb,  8, ctx->mlp_channels3); /* TODO Finish understanding this field. */
 
     flush_put_bits(&pb);
@@ -336,9 +336,9 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         return -1;
     }
 
-    avctx->frame_size               = 40 << (ctx->mlp_sample_rate & 0x7);
-    avctx->coded_frame              = avcodec_alloc_frame();
-    avctx->coded_frame->key_frame   = 1;
+    avctx->frame_size  = 40 << (ctx->mlp_sample_rate & 0x7);
+    avctx->coded_frame = avcodec_alloc_frame();
+    avctx->coded_frame->key_frame  = 1;
 
     ctx->num_channels = avctx->channels + 2; /* +2 noise channels */
     ctx->one_sample_buffer_size = avctx->frame_size
@@ -349,7 +349,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     /* TODO Let user pass parameters for LPC filter. */
 
     major_frame_buffer_size = ctx->one_sample_buffer_size
-                           * ctx->major_header_interval * sizeof(int32_t);
+                            * ctx->major_header_interval * sizeof(int32_t);
 
     ctx->major_frame_buffer = av_malloc(major_frame_buffer_size);
     if (!ctx->major_frame_buffer) {
@@ -394,7 +394,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     }
 
     default_decoding_params(ctx, ctx->decoding_params);
-    clear_channel_params(ctx->channel_params);
+    clear_channel_params   (     ctx->channel_params );
 
     dsputil_init(&ctx->dsp, avctx);
 
@@ -586,7 +586,7 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
 
             if (dp->param_presence_flags & PARAM_HUFFOFFSET) {
                 if (params_changed       & PARAM_HUFFOFFSET) {
-                    put_bits(pb,  1, 1);
+                    put_bits (pb,  1, 1);
                     put_sbits(pb, 15, cp->huff_offset);
                 } else {
                     put_bits(pb, 1, 0);
@@ -828,7 +828,7 @@ static void generate_2_noise_channels(MLPEncodeContext *ctx, unsigned int substr
  *  coefficients. Also shifts the coefficients to fit within 2.14 bits.
  */
 static int code_matrix_coeffs(MLPEncodeContext *ctx,
-                               unsigned int substr, unsigned int mat)
+                              unsigned int substr, unsigned int mat)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     int32_t min = INT32_MAX, max = INT32_MIN;
@@ -1005,9 +1005,9 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
  *  given codebook and a given offset.
  */
 static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
-                                 unsigned int channel, int codebook,
-                                 int32_t min, int32_t max, int16_t offset,
-                                 BestOffset *bo, int *pnext, int up)
+                                        unsigned int channel, int codebook,
+                                        int32_t min, int32_t max, int16_t offset,
+                                        BestOffset *bo, int *pnext, int up)
 {
     int32_t codebook_min = codebook_extremes[codebook][0];
     int32_t codebook_max = codebook_extremes[codebook][1];
@@ -1069,9 +1069,9 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int subs
  *  given codebook. Searches for the best offset to minimize the bits.
  */
 static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
-                          unsigned int channel, int codebook,
-                          int average, int32_t min, int32_t max,
-                          BestOffset *bo, int direction)
+                                 unsigned int channel, int codebook,
+                                 int average, int32_t min, int32_t max,
+                                 BestOffset *bo, int direction)
 {
     int offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
     int previous_count = INT_MAX;
@@ -1268,8 +1268,8 @@ static int compare_primitive_matrices(DecodingParams *prev, DecodingParams *dp)
  *  new decoding params header has to be written.
  */
 static int compare_decoding_params(MLPEncodeContext *ctx, DecodingParams *prev,
-                                ChannelParams channel_params[MAX_CHANNELS],
-                                unsigned int substr)
+                                   ChannelParams channel_params[MAX_CHANNELS],
+                                   unsigned int substr)
 {
     DecodingParams *dp = &ctx->decoding_params[substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
@@ -1553,9 +1553,9 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         buf      += 28;
         buf_size -= 28;
 
-        clear_decoding_params(decoding_params);
-        clear_channel_params (channel_params );
-        clear_channel_params(ctx->channel_params);
+        clear_decoding_params(     decoding_params);
+        clear_channel_params (     channel_params );
+        clear_channel_params (ctx->channel_params );
 
         ctx->major_frame_size = ctx->next_major_frame_size;
         ctx->next_major_frame_size = 0;
