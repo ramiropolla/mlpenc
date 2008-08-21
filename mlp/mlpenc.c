@@ -1573,7 +1573,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
          * memcpy'ing things around?
          */
         memcpy(decoding_params, ctx->decoding_params, sizeof(decoding_params));
-        memcpy(channel_params, ctx->channel_params, sizeof(channel_params));
+        memcpy(channel_params,  ctx->channel_params,  sizeof(channel_params ));
 
         avctx->coded_frame->key_frame = 0;
     }
