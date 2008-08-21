@@ -1178,7 +1178,7 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
     RestartHeader  *rh = &ctx->restart_header [substr];
     int32_t *sample_buffer = ctx->sample_buffer;
     int32_t sign_huff_offset[MAX_CHANNELS];
-    int codebook            [MAX_CHANNELS];
+    int codebook_index      [MAX_CHANNELS];
     int lsb_bits            [MAX_CHANNELS];
     unsigned int i, ch;
 
@@ -1187,14 +1187,14 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
         int sign_shift;
 
         lsb_bits        [ch] = cp->huff_lsbs - dp->quant_step_size[ch];
-        codebook        [ch] = cp->codebook  - 1;
+        codebook_index  [ch] = cp->codebook  - 1;
         sign_huff_offset[ch] = cp->huff_offset;
 
         sign_shift = lsb_bits[ch] - 1;
 
-        if (codebook[ch] >= 0) {
+        if (codebook_index[ch] >= 0) {
             sign_huff_offset[ch] -= 7 << lsb_bits[ch];
-            sign_shift += 2 - codebook[ch];
+            sign_shift += 2 - codebook_index[ch];
         }
 
         /* Unsign if needed. */
@@ -1208,10 +1208,10 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 
             sample -= sign_huff_offset[ch];
 
-            if (codebook[ch] >= 0) {
+            if (codebook_index[ch] >= 0) {
                 int vlc = sample >> lsb_bits[ch];
-                put_bits(pb, ff_mlp_huffman_tables[codebook[ch]][vlc][1],
-                             ff_mlp_huffman_tables[codebook[ch]][vlc][0]);
+                put_bits(pb, ff_mlp_huffman_tables[codebook_index[ch]][vlc][1],
+                             ff_mlp_huffman_tables[codebook_index[ch]][vlc][0]);
             }
 
             put_sbits(pb, lsb_bits[ch], sample);
