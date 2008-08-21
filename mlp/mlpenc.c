@@ -1451,7 +1451,6 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
             if (num_subblocks) {
                 if (!subblock) {
-                    dp->blocksize = 8;
                     ctx->subblock_index = 0;
 
                     backup_sample_buffer = ctx->sample_buffer;
@@ -1463,8 +1462,6 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
                     ctx->subblock_index = 1;
                     dp = &ctx->decoding_params[ctx->frame_index][ctx->subblock_index][substr];
-
-                    dp->blocksize = ctx->frame_size[ctx->frame_index] - 8;
 
                     restart_frame = 0;
                 }
@@ -1615,6 +1612,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                 DecodingParams *dp = &ctx->decoding_params[index][subblock][substr];
                 dp->blocksize = ctx->frame_size[index];
             }
+            ctx->decoding_params[ctx->frame_index][0][substr].blocksize = 8;
+            ctx->decoding_params[ctx->frame_index][1][substr].blocksize = ctx->frame_size[ctx->frame_index] - 8;
             lossless_matrix_coeffs   (ctx, substr);
             output_shift_channels    (ctx, substr);
             rematrix_channels        (ctx, substr);
