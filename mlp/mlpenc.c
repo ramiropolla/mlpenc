@@ -694,12 +694,11 @@ static void determine_quant_step_size(MLPEncodeContext *ctx, unsigned int substr
  */
 static void set_filter_params(MLPEncodeContext *ctx,
                               unsigned int channel, unsigned int filter,
-                              int restart_frame)
+                              int clear_filter)
 {
     FilterParams *fp = &ctx->channel_params[channel].filter_params[filter];
 
-    /* Restart frames must not depend on filter state from previous frames. */
-    if (restart_frame) {
+    if (clear_filter) {
         fp->order    =  0;
         return;
     }
