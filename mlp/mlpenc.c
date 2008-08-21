@@ -422,7 +422,7 @@ static void code_filter_coeffs(MLPEncodeContext *ctx,
 {
     int min = INT_MAX, max = INT_MIN;
     int bits, shift;
-    int or = 0;
+    int coeff_mask = 0;
     int order;
 
     for (order = 0; order < fp->order; order++) {
@@ -433,12 +433,12 @@ static void code_filter_coeffs(MLPEncodeContext *ctx,
         if (coeff > max)
             max = coeff;
 
-        or |= coeff;
+        coeff_mask |= coeff;
     }
 
     bits = FFMAX(number_sbits(min), number_sbits(max));
 
-    for (shift = 0; shift < 7 && !(or & (1<<shift)); shift++);
+    for (shift = 0; shift < 7 && !(coeff_mask & (1<<shift)); shift++);
 
     *pcoeff_bits  = bits;
     *pcoeff_shift = shift;
