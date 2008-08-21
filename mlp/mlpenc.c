@@ -706,6 +706,13 @@ static void set_filter_params(MLPEncodeContext *ctx,
     if (filter == FIR) {
         int32_t *sample_buffer = ctx->sample_buffer + channel;
         int32_t coefs[MAX_LPC_ORDER][MAX_LPC_ORDER];
+        /* TODO Should ctx->major_frame_buffer be reorded in channels, so that
+         *      this buffer becomes unnecessary (but then every access to the
+         *      same offset in all channels will span over several Kbs), or
+         *      should this be a new buffer allocated in the context, or...?
+         *      If it stays on the stack, there will be a limit to
+         *      major_header_interval.
+         */
         int32_t samples[ctx->major_frame_size];
         int32_t *lpc_samples = samples;
         int shift[MLP_MAX_LPC_ORDER];
