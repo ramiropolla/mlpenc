@@ -1443,7 +1443,6 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
         uint8_t parity, checksum;
         PutBitContext pb, tmpb;
         int params_changed;
-        int last_block = 0;
 
         init_put_bits(&pb, buf, buf_size);
 
@@ -1467,11 +1466,6 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
                 }
             } else {
                 ctx->subblock_index = 0;
-            }
-
-            if (ctx->frame_size[ctx->frame_index] < dp->blocksize) {
-                dp->blocksize = ctx->frame_size[ctx->frame_index];
-                last_block = 1;
             }
 
             determine_bits(ctx, substr);
@@ -1510,7 +1504,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
         put_bits(&pb, (-put_bits_count(&pb)) & 15, 0);
 
-        if (last_block) {
+        if (ctx->last_frame == ctx->sample_buffer) {
             /* TODO find a sample and implement shorten_by. */
             put_bits(&pb, 32, END_OF_STREAM);
         }
