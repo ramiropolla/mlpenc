@@ -1601,6 +1601,10 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         ctx->next_major_frame_size = 0;
 
         for (substr = 0; substr < ctx->num_substreams; substr++) {
+            for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
+                DecodingParams *dp = &ctx->decoding_params[index][substr];
+                dp->blocksize = ctx->frame_size[index];
+            }
             lossless_matrix_coeffs   (ctx, substr);
             output_shift_channels    (ctx, substr);
             rematrix_channels        (ctx, substr);
@@ -1623,10 +1627,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     /* Substream headers will be written at the end. */
     for (substr = 0; substr < ctx->num_substreams; substr++) {
-        DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][substr];
-
-        dp->blocksize = ctx->frame_size[ctx->frame_index];
-
         buf      += 2;
         buf_size -= 2;
     }
