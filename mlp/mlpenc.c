@@ -940,7 +940,7 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx, unsigned int substr)
 /** Applies output_shift to all channels when it is needed because of shifted
  *  matrix coefficients.
  */
-static void output_shift_channels(MLPEncodeContext *ctx, unsigned int substr)
+static void output_shift_channels(MLPEncodeContext *ctx)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
     int32_t *sample_buffer = ctx->sample_buffer;
@@ -958,7 +958,7 @@ static void output_shift_channels(MLPEncodeContext *ctx, unsigned int substr)
 }
 
 /** Rematrixes all channels using chosen coefficients. */
-static void rematrix_channels(MLPEncodeContext *ctx, unsigned int substr)
+static void rematrix_channels(MLPEncodeContext *ctx)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
     int32_t *sample_buffer = ctx->sample_buffer;
@@ -1004,7 +1004,7 @@ typedef struct BestOffset {
 /** Determines the least amount of bits needed to encode the samples using no
  *  codebooks.
  */
-static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
+static void no_codebook_bits(MLPEncodeContext *ctx,
                              unsigned int channel,
                              int32_t min, int32_t max,
                              BestOffset *bo)
@@ -1053,7 +1053,7 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 /** Determines the least amount of bits needed to encode the samples using a
  *  given codebook and a given offset.
  */
-static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int substr,
+static inline void codebook_bits_offset(MLPEncodeContext *ctx,
                                         unsigned int channel, int codebook,
                                         int32_t min, int32_t max, int16_t offset,
                                         BestOffset *bo, int *pnext, int up)
@@ -1117,7 +1117,7 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int subs
 /** Determines the least amount of bits needed to encode the samples using a
  *  given codebook. Searches for the best offset to minimize the bits.
  */
-static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
+static inline void codebook_bits(MLPEncodeContext *ctx,
                                  unsigned int channel, int codebook,
                                  int average, int32_t min, int32_t max,
                                  BestOffset *bo, int direction)
@@ -1134,7 +1134,7 @@ static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
     for (;;) {
         BestOffset temp_bo;
 
-        codebook_bits_offset(ctx, substr, channel, codebook,
+        codebook_bits_offset(ctx, channel, codebook,
                              min, max, offset,
                              &temp_bo, &next, direction);
 
@@ -1163,7 +1163,7 @@ static inline void codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 /** Determines the least amount of bits needed to encode the samples using
  *  any or no codebook.
  */
-static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
+static void determine_bits(MLPEncodeContext *ctx)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
     RestartHeader  *rh = ctx->restart_header;
@@ -1190,14 +1190,14 @@ static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
         }
         average /= dp->blocksize;
 
-        no_codebook_bits(ctx, substr, channel, min, max, &bo);
+        no_codebook_bits(ctx, channel, min, max, &bo);
 
         for (i = 1; i < 4; i++) {
             BestOffset temp_bo = { 0, INT_MAX, 0, };
 
-            codebook_bits(ctx, substr, channel, i - 1, average,
+            codebook_bits(ctx, channel, i - 1, average,
                           min, max, &temp_bo, 0);
-            codebook_bits(ctx, substr, channel, i - 1, average,
+            codebook_bits(ctx, channel, i - 1, average,
                           min, max, &temp_bo, 1);
 
             if (temp_bo.bitcount < bo.bitcount) {
@@ -1216,8 +1216,7 @@ static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
 /** Writes the residuals to the bitstream. That is, the VLC codes from the
  *  codebooks (if any is used), and then the residual.
  */
-static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
-                             unsigned int substr)
+static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
     RestartHeader  *rh = ctx->restart_header;
@@ -1318,7 +1317,7 @@ static int compare_primitive_matrices(DecodingParams *prev, DecodingParams *dp)
 /** Compares two DecodingParams and ChannelParams structures to decide if a
  *  new decoding params header has to be written.
  */
-static int compare_decoding_params(MLPEncodeContext *ctx, unsigned int substr)
+static int compare_decoding_params(MLPEncodeContext *ctx)
 {
     DecodingParams *prev = ctx->prev_decoding_params;
     DecodingParams *dp = ctx->cur_decoding_params;
@@ -1488,7 +1487,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
             if (!restart_frame)
                 rh->lossless_check_data ^= *lossless_check_data++;
 
-            write_block_data(ctx, &pb, substr);
+            write_block_data(ctx, &pb);
 
             put_bits(&pb, 1, !restart_frame);
         }
@@ -1635,8 +1634,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             ctx->decoding_params[ctx->frame_index][0][substr].blocksize = 8;
             ctx->decoding_params[ctx->frame_index][1][substr].blocksize = ctx->frame_size[ctx->frame_index] - 8;
             lossless_matrix_coeffs   (ctx, substr);
-            output_shift_channels    (ctx, substr);
-            rematrix_channels        (ctx, substr);
+            output_shift_channels    (ctx);
+            rematrix_channels        (ctx);
             determine_quant_step_size(ctx, substr);
             determine_filters        (ctx);
 
@@ -1648,11 +1647,11 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                     ctx->cur_decoding_params = &ctx->decoding_params[ctx->frame_index][subblock][substr];
                     ctx->cur_channel_params = ctx->channel_params[ctx->frame_index][subblock];
                     if (!subblock) {
-                        determine_bits(ctx, substr);
+                        determine_bits(ctx);
                     } else {
                         num_subblocks = 0;
                     }
-                    ctx->params_changed[index][subblock][substr] = compare_decoding_params(ctx, substr);
+                    ctx->params_changed[index][subblock][substr] = compare_decoding_params(ctx);
                     ctx->prev_decoding_params = ctx->cur_decoding_params;
                     ctx->prev_channel_params = ctx->cur_channel_params;
                 }
