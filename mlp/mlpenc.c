@@ -1467,13 +1467,6 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
             ctx->cur_decoding_params = &ctx->decoding_params[ctx->frame_index][subblock][substr];
             ctx->cur_channel_params = ctx->channel_params[ctx->frame_index][subblock];
 
-            if (num_subblocks) {
-                if (!subblock) {
-                } else {
-                    restart_frame = 0;
-                }
-            }
-
             params_changed = ctx->params_changed[ctx->frame_index][subblock][substr];
 
             if (restart_frame || params_changed) {
@@ -1499,6 +1492,9 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
             write_block_data(ctx, &pb);
 
             put_bits(&pb, 1, !restart_frame);
+
+            if (restart_frame)
+                restart_frame = 0;
         }
 
         put_bits(&pb, (-put_bits_count(&pb)) & 15, 0);
@@ -1653,10 +1649,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                     ctx->cur_channel_params = ctx->channel_params[index][subblock];
                     determine_bits(ctx);
                     ctx->sample_buffer += ctx->cur_decoding_params->blocksize * ctx->num_channels;
-                    if (!subblock) {
-                    } else {
+                    if (subblock)
                         num_subblocks = 0;
-                    }
                     ctx->params_changed[index][subblock][substr] = compare_decoding_params(ctx);
                     ctx->prev_decoding_params = ctx->cur_decoding_params;
                     ctx->prev_channel_params = ctx->cur_channel_params;
