@@ -123,6 +123,9 @@ typedef struct {
     DecodingParams  decoding_params[MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];
     RestartHeader   restart_header [MAX_SUBSTREAMS];
 
+    ChannelParams   restart_channel_params[MAX_CHANNELS];
+    DecodingParams  restart_decoding_params[MAX_SUBSTREAMS];
+
     DSPContext      dsp;
 } MLPEncodeContext;
 
@@ -413,6 +416,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         rh->max_matrix_channel = 1;
     }
 
+    clear_channel_params(ctx->restart_channel_params);
+    clear_decoding_params(ctx->restart_decoding_params);
 
     for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
         for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++) {
@@ -1517,9 +1522,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                             void *data)
 {
-    DecodingParams decoding_params[MAX_SUBSTREAMS];
     uint16_t substream_data_len[MAX_SUBSTREAMS];
-    ChannelParams channel_params[MAX_CHANNELS];
     MLPEncodeContext *ctx = avctx->priv_data;
     uint8_t *buf2, *buf1, *buf0 = buf;
     int total_length = 0;
@@ -1573,9 +1576,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         buf      += 28;
         buf_size -= 28;
 
-        clear_decoding_params(     decoding_params);
-        clear_channel_params (     channel_params );
-
         for (index = 0; index < MAJOR_HEADER_INTERVAL; index++)
             for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
                 clear_channel_params(ctx->channel_params[index][subblock]);
@@ -1584,6 +1584,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         ctx->next_major_frame_size = 0;
 
         for (substr = 0; substr < ctx->num_substreams; substr++) {
+            DecodingParams *decoding_params = ctx->restart_decoding_params;
+            ChannelParams *channel_params = ctx->restart_channel_params;
             unsigned int backup_frame_index = ctx->frame_index;
             int32_t *backup_sample_buffer = ctx->sample_buffer;
             unsigned int num_subblocks = 1;
@@ -1612,9 +1614,9 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                     } else {
                         num_subblocks = 0;
                     }
-                    ctx->params_changed[index][subblock][substr] = compare_decoding_params(ctx, &decoding_params[substr], channel_params, substr);
-                    memcpy(decoding_params, ctx->decoding_params[ctx->frame_index][ctx->subblock_index], sizeof(ctx->decoding_params[ctx->frame_index][ctx->subblock_index]));
-                    memcpy(channel_params, ctx->channel_params[ctx->frame_index][ctx->subblock_index], sizeof(ctx->channel_params[ctx->frame_index][ctx->subblock_index]));
+                    ctx->params_changed[index][subblock][substr] = compare_decoding_params(ctx, decoding_params, channel_params, substr);
+                    decoding_params = ctx->decoding_params[ctx->frame_index][ctx->subblock_index];
+                    channel_params = ctx->channel_params[ctx->frame_index][ctx->subblock_index];
                 }
             }
             ctx->sample_buffer = backup_sample_buffer;
