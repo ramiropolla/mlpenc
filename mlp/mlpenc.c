@@ -87,6 +87,7 @@ typedef struct {
     int             sample_fmt;             ///< sample format encoded for MLP
     int             mlp_sample_rate;        ///< sample rate encoded for MLP
 
+    int32_t        *write_buffer;           ///< Pointer to data currently being written to bitstream.
     int32_t        *sample_buffer;          ///< Pointer to current access unit samples.
     int32_t        *major_frame_buffer;     ///< Buffer with all data for one entire major frame interval.
     int32_t        *last_frame;             ///< Pointer to last frame with data to encode.
@@ -1052,7 +1053,7 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx, unsigned int subs
 {
     int32_t codebook_min = codebook_extremes[codebook][0];
     int32_t codebook_max = codebook_extremes[codebook][1];
-    int32_t *sample_buffer = ctx->sample_buffer + channel;
+    int32_t *sample_buffer = ctx->write_buffer + channel;
     DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][ctx->subblock_index][substr];
     int codebook_offset  = 7 + (2 - codebook);
     int32_t unsign_offset = offset;
@@ -1162,7 +1163,7 @@ static void determine_bits(MLPEncodeContext *ctx, unsigned int substr)
     unsigned int channel;
 
     for (channel = 0; channel <= rh->max_channel; channel++) {
-        int32_t *sample_buffer = ctx->sample_buffer + channel;
+        int32_t *sample_buffer = ctx->write_buffer + channel;
         ChannelParams *cp = &ctx->channel_params[ctx->frame_index][ctx->subblock_index][channel];
         int32_t min = INT32_MAX, max = INT32_MIN;
         int best_codebook = 0;
@@ -1213,7 +1214,7 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
 {
     DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][ctx->subblock_index][substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
-    int32_t *sample_buffer = ctx->sample_buffer;
+    int32_t *sample_buffer = ctx->write_buffer;
     int32_t sign_huff_offset[MAX_CHANNELS];
     int codebook_index      [MAX_CHANNELS];
     int lsb_bits            [MAX_CHANNELS];
@@ -1255,6 +1256,8 @@ static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb,
         }
         sample_buffer += 2; /* noise channels */
     }
+
+    ctx->write_buffer = sample_buffer;
 }
 
 /** Compares two FilterParams structures and returns 1 if anything has
@@ -1438,9 +1441,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         unsigned int subblock, num_subblocks = restart_frame;
-        DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][ctx->subblock_index][substr];
         RestartHeader  *rh = &ctx->restart_header [substr];
-        int32_t *backup_sample_buffer;
         uint8_t parity, checksum;
         PutBitContext pb, tmpb;
         int params_changed;
@@ -1451,15 +1452,11 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
             if (num_subblocks) {
                 if (!subblock) {
-                    backup_sample_buffer = ctx->sample_buffer;
                 } else {
-                    ctx->sample_buffer += ctx->num_channels * dp->blocksize;
-
                     memcpy(decoding_params, ctx->decoding_params[ctx->frame_index][ctx->subblock_index], sizeof(ctx->decoding_params[ctx->frame_index][ctx->subblock_index]));
                     memcpy(channel_params, ctx->channel_params[ctx->frame_index][ctx->subblock_index], sizeof(ctx->channel_params[ctx->frame_index][ctx->subblock_index]));
 
                     ctx->subblock_index = 1;
-                    dp = &ctx->decoding_params[ctx->frame_index][ctx->subblock_index][substr];
 
                     restart_frame = 0;
                 }
@@ -1498,9 +1495,6 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
         ctx->prev_subblock_index = ctx->subblock_index;
         ctx->subblock_index = 0;
-
-        if (num_subblocks)
-            ctx->sample_buffer = backup_sample_buffer;
 
         put_bits(&pb, (-put_bits_count(&pb)) & 15, 0);
 
@@ -1625,6 +1619,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
         avctx->coded_frame->key_frame = 0;
     }
+
+    ctx->write_buffer = ctx->sample_buffer;
 
     buf1 = buf;
 
