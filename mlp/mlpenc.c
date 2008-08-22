@@ -1299,7 +1299,7 @@ static int compare_filter_params(FilterParams *prev, FilterParams *fp)
 /** Compare two primitive matrices and returns 1 if anything has changed.
  *  Returns 0 if they are both equal.
  */
-static int compare_primitive_matrices(MatrixParams *prev, MatrixParams *mp)
+static int compare_matrix_params(MatrixParams *prev, MatrixParams *mp)
 {
     unsigned int channel, mat;
 
@@ -1340,7 +1340,7 @@ static int compare_decoding_params(MLPEncodeContext *ctx)
     if (prev->blocksize != dp->blocksize)
         retval |= PARAM_BLOCKSIZE;
 
-    if (compare_primitive_matrices(prev_mp, mp))
+    if (compare_matrix_params(prev_mp, mp))
         retval |= PARAM_MATRIX;
 
     for (ch = 0; ch <= rh->max_matrix_channel; ch++)
