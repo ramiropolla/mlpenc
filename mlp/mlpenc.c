@@ -126,6 +126,9 @@ typedef struct {
     ChannelParams   restart_channel_params[MAX_CHANNELS];
     DecodingParams  restart_decoding_params[MAX_SUBSTREAMS];
 
+    ChannelParams  *prev_channel_params;
+    DecodingParams *prev_decoding_params;
+
     DSPContext      dsp;
 } MLPEncodeContext;
 
@@ -1007,7 +1010,7 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
                              int32_t min, int32_t max,
                              BestOffset *bo)
 {
-    ChannelParams  *cp = &ctx->channel_params[ctx->frame_index][ctx->subblock_index][channel];
+    ChannelParams *prev_cp = &ctx->prev_channel_params[channel];
     DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][ctx->subblock_index][substr];
     int16_t offset;
     int32_t unsign;
@@ -1034,8 +1037,8 @@ static void no_codebook_bits(MLPEncodeContext *ctx, unsigned int substr,
 
     /* Check if we can use the same offset as last access_unit to save
      * on writing a new header. */
-    if (lsb_bits + dp->quant_step_size[channel] == cp->huff_lsbs) {
-        int16_t cur_offset = cp->huff_offset;
+    if (lsb_bits + dp->quant_step_size[channel] == prev_cp->huff_lsbs) {
+        int16_t cur_offset = prev_cp->huff_offset;
         int32_t cur_max    = cur_offset + unsign - 1;
         int32_t cur_min    = cur_offset - unsign;
 
@@ -1316,10 +1319,9 @@ static int compare_primitive_matrices(DecodingParams *prev, DecodingParams *dp)
 /** Compares two DecodingParams and ChannelParams structures to decide if a
  *  new decoding params header has to be written.
  */
-static int compare_decoding_params(MLPEncodeContext *ctx, DecodingParams *prev,
-                                   ChannelParams channel_params[MAX_CHANNELS],
-                                   unsigned int substr)
+static int compare_decoding_params(MLPEncodeContext *ctx, unsigned int substr)
 {
+    DecodingParams *prev = &ctx->prev_decoding_params[substr];
     DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][ctx->subblock_index][substr];
     RestartHeader  *rh = &ctx->restart_header [substr];
     unsigned int ch;
@@ -1347,7 +1349,7 @@ static int compare_decoding_params(MLPEncodeContext *ctx, DecodingParams *prev,
         }
 
     for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
-        ChannelParams *prev_cp = &channel_params[ch];
+        ChannelParams *prev_cp = &ctx->prev_channel_params[ch];
         ChannelParams *cp = &ctx->channel_params[ctx->frame_index][ctx->subblock_index][ch];
 
         if (!(retval & PARAM_FIR) &&
@@ -1584,11 +1586,12 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         ctx->next_major_frame_size = 0;
 
         for (substr = 0; substr < ctx->num_substreams; substr++) {
-            DecodingParams *decoding_params = ctx->restart_decoding_params;
-            ChannelParams *channel_params = ctx->restart_channel_params;
             unsigned int backup_frame_index = ctx->frame_index;
             int32_t *backup_sample_buffer = ctx->sample_buffer;
             unsigned int num_subblocks = 1;
+
+            ctx->prev_decoding_params = ctx->restart_decoding_params;
+            ctx->prev_channel_params = ctx->restart_channel_params;
 
             for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
             for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
@@ -1614,9 +1617,9 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                     } else {
                         num_subblocks = 0;
                     }
-                    ctx->params_changed[index][subblock][substr] = compare_decoding_params(ctx, decoding_params, channel_params, substr);
-                    decoding_params = ctx->decoding_params[ctx->frame_index][ctx->subblock_index];
-                    channel_params = ctx->channel_params[ctx->frame_index][ctx->subblock_index];
+                    ctx->params_changed[index][subblock][substr] = compare_decoding_params(ctx, substr);
+                    ctx->prev_decoding_params = ctx->decoding_params[ctx->frame_index][ctx->subblock_index];
+                    ctx->prev_channel_params = ctx->channel_params[ctx->frame_index][ctx->subblock_index];
                 }
             }
             ctx->sample_buffer = backup_sample_buffer;
