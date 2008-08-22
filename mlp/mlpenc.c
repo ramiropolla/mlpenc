@@ -46,15 +46,19 @@ typedef struct {
 } RestartHeader;
 
 typedef struct {
-    uint16_t        blocksize;                  ///< number of PCM samples in current audio block
-    uint8_t         quant_step_size[MAX_CHANNELS];  ///< left shift to apply to Huffman-decoded residuals
-
     uint8_t         num_primitive_matrices;     ///< number of matrices to apply
 
     int32_t         matrix_coeff[MAX_MATRICES][MAX_CHANNELS+2];
     uint8_t         frac_bits[MAX_CHANNELS];
 
     int8_t          output_shift[MAX_CHANNELS]; ///< Left shift to apply to decoded PCM values to get final 24-bit output.
+} MatrixParams;
+
+typedef struct {
+    uint16_t        blocksize;                  ///< number of PCM samples in current audio block
+    uint8_t         quant_step_size[MAX_CHANNELS];  ///< left shift to apply to Huffman-decoded residuals
+
+    MatrixParams    matrix_params;
 
     uint8_t         param_presence_flags;       ///< Bitmask of which parameter sets are conveyed in a decoding parameter block.
 #define PARAM_PRESENCE_FLAGS    (1 << 8)
@@ -265,12 +269,9 @@ static void clear_decoding_params(DecodingParams decoding_params[MAX_SUBSTREAMS]
         DecodingParams *dp = &decoding_params[substr];
 
         dp->param_presence_flags   = 0xff;
-        dp->num_primitive_matrices = 0;
         dp->blocksize              = 8;
 
-        memset(dp->frac_bits      , 0, sizeof(dp->frac_bits      ));
-        memset(dp->matrix_coeff   , 0, sizeof(dp->matrix_coeff   ));
-        memset(dp->output_shift   , 0, sizeof(dp->output_shift   ));
+        memset(&dp->matrix_params , 0, sizeof(MatrixParams       ));
         memset(dp->quant_step_size, 0, sizeof(dp->quant_step_size));
     }
 }
@@ -304,7 +305,7 @@ static void default_decoding_params(MLPEncodeContext *ctx,
         DecodingParams *dp = &decoding_params[substr];
         uint8_t param_presence_flags = 0;
 
-        dp->num_primitive_matrices = ctx->avctx->channels - 1;
+        dp->matrix_params.num_primitive_matrices = ctx->avctx->channels - 1;
 
         param_presence_flags |= PARAM_BLOCKSIZE;
         param_presence_flags |= PARAM_MATRIX;
@@ -510,26 +511,27 @@ static void write_filter_params(MLPEncodeContext *ctx, PutBitContext *pb,
 static void write_matrix_params(MLPEncodeContext *ctx, PutBitContext *pb)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
+    MatrixParams *mp = &dp->matrix_params;
     unsigned int mat;
 
-    put_bits(pb, 4, dp->num_primitive_matrices);
+    put_bits(pb, 4, mp->num_primitive_matrices);
 
-    for (mat = 1; mat <= dp->num_primitive_matrices; mat++) {
+    for (mat = 1; mat <= mp->num_primitive_matrices; mat++) {
         unsigned int channel;
 
         put_bits(pb, 4, mat               ); /* matrix_out_ch */
-        put_bits(pb, 4, dp->frac_bits[mat]);
+        put_bits(pb, 4, mp->frac_bits[mat]);
         put_bits(pb, 1, 0                 ); /* lsb_bypass */
 
         for (channel = 0; channel < ctx->num_channels; channel++) {
-            int32_t coeff = dp->matrix_coeff[mat][channel];
+            int32_t coeff = mp->matrix_coeff[mat][channel];
 
             if (coeff) {
                 put_bits(pb, 1, 1);
 
-                coeff >>= 14 - dp->frac_bits[mat];
+                coeff >>= 14 - mp->frac_bits[mat];
 
-                put_sbits(pb, dp->frac_bits[mat] + 2, coeff);
+                put_sbits(pb, mp->frac_bits[mat] + 2, coeff);
             } else {
                 put_bits(pb, 1, 0);
             }
@@ -545,6 +547,7 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
 {
     DecodingParams *dp = ctx->cur_decoding_params;
     RestartHeader  *rh = ctx->restart_header;
+    MatrixParams *mp = &dp->matrix_params;
     unsigned int ch;
 
     if (dp->param_presence_flags != PARAMS_DEFAULT &&
@@ -577,7 +580,7 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
         if (params_changed       & PARAM_OUTSHIFT) {
             put_bits(pb, 1, 1);
             for (ch = 0; ch <= rh->max_matrix_channel; ch++)
-                put_sbits(pb, 4, dp->output_shift[ch]);
+                put_sbits(pb, 4, mp->output_shift[ch]);
         } else {
             put_bits(pb, 1, 0);
         }
@@ -874,6 +877,7 @@ static int code_matrix_coeffs(MLPEncodeContext *ctx,
                               unsigned int substr, unsigned int index, unsigned int subblock, unsigned int mat)
 {
     DecodingParams *dp = &ctx->decoding_params[index][subblock][substr];
+    MatrixParams *mp = &dp->matrix_params;
     int32_t min = INT32_MAX, max = INT32_MIN;
     int32_t coeff_mask = 0;
     unsigned int channel;
@@ -885,7 +889,7 @@ static int code_matrix_coeffs(MLPEncodeContext *ctx,
         return 0;
 
     for (channel = 0; channel < ctx->num_channels; channel++) {
-        int32_t coeff = dp->matrix_coeff[mat][channel];
+        int32_t coeff = mp->matrix_coeff[mat][channel];
 
         if (coeff < min)
             min = coeff;
@@ -899,17 +903,17 @@ static int code_matrix_coeffs(MLPEncodeContext *ctx,
 
     if (shift) {
         for (channel = 0; channel < ctx->num_channels; channel++)
-            dp->matrix_coeff[mat][channel] >>= shift;
+            mp->matrix_coeff[mat][channel] >>= shift;
 
         coeff_mask >>= shift;
     }
 
     for (bits = 0; bits < 14 && !(coeff_mask & (1<<bits)); bits++);
 
-    dp->frac_bits   [mat] = 14 - bits;
+    mp->frac_bits   [mat] = 14 - bits;
 
     for (channel = 0; channel < ctx->num_channels; channel++)
-        dp->output_shift[channel] = shift;
+        mp->output_shift[channel] = shift;
 
     return ctx->num_channels - 3;
 }
@@ -924,15 +928,16 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx, unsigned int substr)
     for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++) {
     for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
     DecodingParams *dp = &ctx->decoding_params[index][subblock][substr];
+    MatrixParams *mp = &dp->matrix_params;
 
     /* TODO actual decorrelation. */
 
-    dp->matrix_coeff[1][0] =  1 << 14;
-    dp->matrix_coeff[1][1] = -1 << 14;
-    dp->matrix_coeff[1][2] =  0 << 14;
-    dp->matrix_coeff[1][3] =  0 << 14;
+    mp->matrix_coeff[1][0] =  1 << 14;
+    mp->matrix_coeff[1][1] = -1 << 14;
+    mp->matrix_coeff[1][2] =  0 << 14;
+    mp->matrix_coeff[1][3] =  0 << 14;
 
-    dp->num_primitive_matrices = code_matrix_coeffs(ctx, substr, subblock, index, 1);
+    mp->num_primitive_matrices = code_matrix_coeffs(ctx, substr, subblock, index, 1);
     }
     }
 }
@@ -943,6 +948,7 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx, unsigned int substr)
 static void output_shift_channels(MLPEncodeContext *ctx)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
+    MatrixParams *mp = &dp->matrix_params;
     int32_t *sample_buffer = ctx->sample_buffer;
     unsigned int i;
 
@@ -950,7 +956,7 @@ static void output_shift_channels(MLPEncodeContext *ctx)
         unsigned int channel;
 
         for (channel = 0; channel < ctx->num_channels - 2; channel++) {
-            *sample_buffer++ >>= dp->output_shift[channel];
+            *sample_buffer++ >>= mp->output_shift[channel];
         }
 
         sample_buffer += 2;
@@ -961,13 +967,14 @@ static void output_shift_channels(MLPEncodeContext *ctx)
 static void rematrix_channels(MLPEncodeContext *ctx)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
+    MatrixParams *mp = &dp->matrix_params;
     int32_t *sample_buffer = ctx->sample_buffer;
     unsigned int mat, i, maxchan;
 
     maxchan = ctx->num_channels;
 
-    for (mat = 1; mat <= dp->num_primitive_matrices; mat++) {
-        unsigned int msb_mask_bits = (ctx->avctx->sample_fmt == SAMPLE_FMT_S16 ? 8 : 0) - dp->output_shift[mat];
+    for (mat = 1; mat <= mp->num_primitive_matrices; mat++) {
+        unsigned int msb_mask_bits = (ctx->avctx->sample_fmt == SAMPLE_FMT_S16 ? 8 : 0) - mp->output_shift[mat];
         int32_t mask = MSB_MASK(msb_mask_bits);
 
         sample_buffer = ctx->sample_buffer;
@@ -977,7 +984,7 @@ static void rematrix_channels(MLPEncodeContext *ctx)
 
             for (src_ch = 0; src_ch < maxchan; src_ch++) {
                 int32_t sample = *(sample_buffer + src_ch);
-                accum += (int64_t) sample * dp->matrix_coeff[mat][src_ch];
+                accum += (int64_t) sample * mp->matrix_coeff[mat][src_ch];
             }
             sample_buffer[mat] = (accum >> 14) & mask;
 
@@ -1292,23 +1299,23 @@ static int compare_filter_params(FilterParams *prev, FilterParams *fp)
 /** Compare two primitive matrices and returns 1 if anything has changed.
  *  Returns 0 if they are both equal.
  */
-static int compare_primitive_matrices(DecodingParams *prev, DecodingParams *dp)
+static int compare_primitive_matrices(MatrixParams *prev, MatrixParams *mp)
 {
     unsigned int channel, mat;
 
-    if (prev->num_primitive_matrices != dp->num_primitive_matrices)
+    if (prev->num_primitive_matrices != mp->num_primitive_matrices)
         return 1;
 
     if (!prev->num_primitive_matrices)
         return 0;
 
     for (channel = 0; channel < MAX_CHANNELS; channel++)
-        if (prev->frac_bits[channel] != dp->frac_bits[channel])
+        if (prev->frac_bits[channel] != mp->frac_bits[channel])
             return 1;
 
     for (mat = 0; mat < MAX_MATRICES; mat++)
         for (channel = 0; channel < MAX_CHANNELS + 2; channel++)
-            if (prev->matrix_coeff[mat][channel] != dp->matrix_coeff[mat][channel])
+            if (prev->matrix_coeff[mat][channel] != mp->matrix_coeff[mat][channel])
                 return 1;
 
     return 0;
@@ -1321,6 +1328,8 @@ static int compare_decoding_params(MLPEncodeContext *ctx)
 {
     DecodingParams *prev = ctx->prev_decoding_params;
     DecodingParams *dp = ctx->cur_decoding_params;
+    MatrixParams *prev_mp = &prev->matrix_params;
+    MatrixParams *mp = &dp->matrix_params;
     RestartHeader  *rh = ctx->restart_header;
     unsigned int ch;
     int retval = 0;
@@ -1331,11 +1340,11 @@ static int compare_decoding_params(MLPEncodeContext *ctx)
     if (prev->blocksize != dp->blocksize)
         retval |= PARAM_BLOCKSIZE;
 
-    if (compare_primitive_matrices(prev, dp))
+    if (compare_primitive_matrices(prev_mp, mp))
         retval |= PARAM_MATRIX;
 
     for (ch = 0; ch <= rh->max_matrix_channel; ch++)
-        if (prev->output_shift[ch] != dp->output_shift[ch]) {
+        if (prev_mp->output_shift[ch] != mp->output_shift[ch]) {
             retval |= PARAM_OUTSHIFT;
             break;
         }
