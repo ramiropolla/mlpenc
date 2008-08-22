@@ -186,7 +186,7 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
     put_bits(&pb, 16, 0x4000);
     put_bits(&pb, 16, 0x0000);
 
-    put_bits(&pb,  1, 1); /* This value is 1 in all tested MLP samples.
+    put_bits(&pb,  1, 1); /* is_vbr: This value is 1 in all tested MLP samples.
                            * I suppose it would be 0 only when no filters
                            * or codebooks are used. */
     put_bits(&pb, 15, 0); /* TODO peak_bitrate: Most MLP samples tested encode
