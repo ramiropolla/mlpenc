@@ -1521,13 +1521,58 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
     return buf;
 }
 
+/** Writes an entire access unit to the bitstream. */
+static unsigned int write_access_unit(MLPEncodeContext *ctx, uint8_t *buf,
+                                      int buf_size, int restart_frame)
+{
+    uint16_t substream_data_len[MAX_SUBSTREAMS];
+    uint8_t *buf2, *buf1, *buf0 = buf;
+    unsigned int substr;
+    int total_length;
+
+    ctx->write_buffer = ctx->sample_buffer;
+
+    if (buf_size < 4)
+        return -1;
+
+    /* Frame header will be written at the end. */
+    buf      += 4;
+    buf_size -= 4;
+
+    if (restart_frame) {
+        if (buf_size < 28)
+            return -1;
+        write_major_sync(ctx, buf, buf_size);
+        buf      += 28;
+        buf_size -= 28;
+    }
+
+    buf1 = buf;
+
+    /* Substream headers will be written at the end. */
+    for (substr = 0; substr < ctx->num_substreams; substr++) {
+        buf      += 2;
+        buf_size -= 2;
+    }
+
+    buf2 = buf;
+
+    total_length = buf - buf0;
+
+    buf = write_substrs(ctx, buf, buf_size, restart_frame, substream_data_len);
+
+    total_length += buf - buf2;
+
+    write_frame_headers(ctx, buf0, buf1, total_length / 2, substream_data_len);
+
+    return total_length;
+}
+
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                             void *data)
 {
-    uint16_t substream_data_len[MAX_SUBSTREAMS];
     MLPEncodeContext *ctx = avctx->priv_data;
-    uint8_t *buf2, *buf1, *buf0 = buf;
-    int total_length = 0;
+    unsigned int bytes_written;
     unsigned int substr;
     int restart_frame;
 
@@ -1560,23 +1605,10 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         return -1;
     }
 
-    if (buf_size < 4)
-        return -1;
-
-    /* Frame header will be written at the end. */
-    buf      += 4;
-    buf_size -= 4;
-
     restart_frame = !(avctx->frame_number & (ctx->major_header_interval - 1));
 
     if (restart_frame) {
         unsigned int index, subblock;
-
-        if (buf_size < 28)
-            return -1;
-        write_major_sync(ctx, buf, buf_size);
-        buf      += 28;
-        buf_size -= 28;
 
         for (index = 0; index < MAJOR_HEADER_INTERVAL; index++)
             for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
@@ -1631,25 +1663,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         avctx->coded_frame->key_frame = 0;
     }
 
-    ctx->write_buffer = ctx->sample_buffer;
-
-    buf1 = buf;
-
-    /* Substream headers will be written at the end. */
-    for (substr = 0; substr < ctx->num_substreams; substr++) {
-        buf      += 2;
-        buf_size -= 2;
-    }
-
-    buf2 = buf;
-
-    total_length = buf - buf0;
-
-    buf = write_substrs(ctx, buf, buf_size, restart_frame, substream_data_len);
-
-    total_length += buf - buf2;
-
-    write_frame_headers(ctx, buf0, buf1, total_length / 2, substream_data_len);
+    bytes_written = write_access_unit(ctx, buf, buf_size, restart_frame);
 
     ctx->timestamp += ctx->frame_size[ctx->frame_index];
 
@@ -1663,7 +1677,7 @@ input_and_return:
         ctx->last_frame = ctx->sample_buffer;
     }
 
-    return total_length;
+    return bytes_written;
 }
 
 static av_cold int mlp_encode_close(AVCodecContext *avctx)
