@@ -1624,7 +1624,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         ctx->next_major_frame_size = 0;
 
         for (substr = 0; substr < ctx->num_substreams; substr++) {
-            unsigned int backup_frame_index = ctx->frame_index;
             int32_t *backup_sample_buffer = ctx->sample_buffer;
             unsigned int num_subblocks = 1;
 
@@ -1649,12 +1648,11 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             determine_filters        (ctx);
 
             for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
-                ctx->frame_index = index;
                 ctx->sample_buffer = ctx->major_frame_buffer
-                                   + ctx->frame_index * ctx->one_sample_buffer_size;
+                                   + index * ctx->one_sample_buffer_size;
                 for (subblock = 0; subblock <= num_subblocks; subblock++) {
-                    ctx->cur_decoding_params = &ctx->decoding_params[ctx->frame_index][subblock][substr];
-                    ctx->cur_channel_params = ctx->channel_params[ctx->frame_index][subblock];
+                    ctx->cur_decoding_params = &ctx->decoding_params[index][subblock][substr];
+                    ctx->cur_channel_params = ctx->channel_params[index][subblock];
                     if (!subblock) {
                         determine_bits(ctx);
                     } else {
@@ -1666,7 +1664,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                 }
             }
             ctx->sample_buffer = backup_sample_buffer;
-            ctx->frame_index = backup_frame_index;
         }
 
         avctx->coded_frame->key_frame = 1;
