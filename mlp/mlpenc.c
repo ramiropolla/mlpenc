@@ -1648,13 +1648,12 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             determine_filters        (ctx);
 
             for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
-                ctx->sample_buffer = ctx->major_frame_buffer
-                                   + index * ctx->one_sample_buffer_size;
                 for (subblock = 0; subblock <= num_subblocks; subblock++) {
                     ctx->cur_decoding_params = &ctx->decoding_params[index][subblock][substr];
                     ctx->cur_channel_params = ctx->channel_params[index][subblock];
+                    determine_bits(ctx);
+                    ctx->sample_buffer += ctx->cur_decoding_params->blocksize * ctx->num_channels;
                     if (!subblock) {
-                        determine_bits(ctx);
                     } else {
                         num_subblocks = 0;
                     }
