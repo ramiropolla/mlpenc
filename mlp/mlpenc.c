@@ -1557,11 +1557,9 @@ static unsigned int write_access_unit(MLPEncodeContext *ctx, uint8_t *buf,
 
     buf2 = buf;
 
-    total_length = buf - buf0;
-
     buf = write_substrs(ctx, buf, buf_size, restart_frame, substream_data_len);
 
-    total_length += buf - buf2;
+    total_length = buf - buf0;
 
     write_frame_headers(ctx, buf0, buf1, total_length / 2, substream_data_len);
 
