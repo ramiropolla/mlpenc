@@ -103,6 +103,7 @@ typedef struct {
     unsigned int    prev_frame_index;       ///< Index of previous frame being encoded.
 
     unsigned int    subblock_index;         ///< Index of current subblock being encoded.
+    unsigned int    prev_subblock_index;    ///< Index of previous subblock being encoded.
 
     unsigned int    one_sample_buffer_size; ///< Number of samples*channel for one access unit.
 
@@ -1450,8 +1451,6 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
             if (num_subblocks) {
                 if (!subblock) {
-                    ctx->subblock_index = 0;
-
                     backup_sample_buffer = ctx->sample_buffer;
                 } else {
                     ctx->sample_buffer += ctx->num_channels * dp->blocksize;
@@ -1464,8 +1463,6 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
                     restart_frame = 0;
                 }
-            } else {
-                ctx->subblock_index = 0;
             }
 
             determine_bits(ctx, substr);
@@ -1498,6 +1495,9 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
             put_bits(&pb, 1, !restart_frame);
         }
+
+        ctx->prev_subblock_index = ctx->subblock_index;
+        ctx->subblock_index = 0;
 
         if (num_subblocks)
             ctx->sample_buffer = backup_sample_buffer;
@@ -1620,8 +1620,8 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         /* TODO Should these be a (DecodingParams *) in the context instead of
          * memcpy'ing things around?
          */
-        memcpy(decoding_params, ctx->decoding_params[ctx->prev_frame_index][ctx->subblock_index], sizeof(decoding_params));
-        memcpy(channel_params, ctx->channel_params[ctx->prev_frame_index][ctx->subblock_index], sizeof(channel_params));
+        memcpy(decoding_params, ctx->decoding_params[ctx->prev_frame_index][ctx->prev_subblock_index], sizeof(decoding_params));
+        memcpy(channel_params, ctx->channel_params[ctx->prev_frame_index][ctx->prev_subblock_index], sizeof(channel_params));
 
         avctx->coded_frame->key_frame = 0;
     }
