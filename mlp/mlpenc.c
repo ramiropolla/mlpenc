@@ -702,12 +702,13 @@ static int number_trailing_zeroes(int32_t sample)
 /** Determines how many bits are zero at the end of all samples so they can be
  *  shifted out for the huffman coder.
  */
-static void determine_quant_step_size(MLPEncodeContext *ctx, unsigned int substr)
+static void determine_quant_step_size(MLPEncodeContext *ctx)
 {
+    DecodingParams *dp = ctx->cur_decoding_params;
     RestartHeader  *rh = ctx->restart_header;
     int32_t *sample_buffer = ctx->sample_buffer;
     int32_t sample_mask[MAX_CHANNELS];
-    unsigned int channel, index, subblock;
+    unsigned int channel;
     int i;
 
     memset(sample_mask, 0x00, sizeof(sample_mask));
@@ -719,13 +720,8 @@ static void determine_quant_step_size(MLPEncodeContext *ctx, unsigned int substr
         sample_buffer += 2; /* noise channels */
     }
 
-    for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++) {
-    for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
-        DecodingParams *dp = &ctx->decoding_params[index][subblock][substr];
     for (channel = 0; channel <= rh->max_channel; channel++)
         dp->quant_step_size[channel] = number_trailing_zeroes(sample_mask[channel]);
-    }
-    }
 }
 
 static void copy_filter_params(FilterParams *dst, FilterParams *src)
@@ -742,6 +738,25 @@ static void copy_filter_params(FilterParams *dst, FilterParams *src)
     }
 }
 
+static void copy_matrix_params(MatrixParams *dst, MatrixParams *src)
+{
+    dst->count = src->count;
+
+    if (dst->count) {
+        unsigned int channel;
+
+        for (channel = 0; channel < MAX_CHANNELS; channel++) {
+            unsigned int count;
+
+            dst->fbits[channel] = src->fbits[channel];
+            dst->shift[channel] = src->shift[channel];
+
+            for (count = 0; count < MAX_MATRICES; count++)
+                dst->coeff[count][channel] = src->coeff[count][channel];
+        }
+    }
+}
+
 /** Determines the best filter parameters for the given data and writes the
  *  necessary information to the context.
  *  TODO Add IIR filter predictor!
@@ -750,11 +765,11 @@ static void set_filter_params(MLPEncodeContext *ctx,
                               unsigned int channel, unsigned int filter,
                               int clear_filter)
 {
-    unsigned int index, subblock;
-    FilterParams filter_params;
+    ChannelParams *cp = &ctx->cur_channel_params[channel];
+    FilterParams *fp = &cp->filter_params[filter];
 
     if (clear_filter || filter == IIR) {
-        filter_params.order = 0;
+        fp->order = 0;
     } else
     if (filter == FIR) {
         int32_t *sample_buffer = ctx->sample_buffer + channel;
@@ -774,17 +789,12 @@ static void set_filter_params(MLPEncodeContext *ctx,
                                   coefs, shift, 1,
                                   ORDER_METHOD_EST, MLP_MAX_LPC_SHIFT, 0);
 
-        filter_params.order = order;
-        filter_params.shift = shift[order-1];
+        fp->order = order;
+        fp->shift = shift[order-1];
 
         for (i = 0; i < order; i++)
-            filter_params.coeff[i] = coefs[order-1][i];
+            fp->coeff[i] = coefs[order-1][i];
     }
-
-    for (index = 0; index < MAJOR_HEADER_INTERVAL; index++)
-        for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
-            if (index || subblock)
-                copy_filter_params(&ctx->channel_params[index][subblock][channel].filter_params[filter], &filter_params);
 }
 
 #define INT24_MAX ((1 << 23) - 1)
@@ -873,10 +883,9 @@ static void generate_2_noise_channels(MLPEncodeContext *ctx)
 /** Determines how many fractional bits are needed to encode matrix
  *  coefficients. Also shifts the coefficients to fit within 2.14 bits.
  */
-static int code_matrix_coeffs(MLPEncodeContext *ctx,
-                              unsigned int substr, unsigned int index, unsigned int subblock, unsigned int mat)
+static int code_matrix_coeffs(MLPEncodeContext *ctx, unsigned int mat)
 {
-    DecodingParams *dp = &ctx->decoding_params[index][subblock][substr];
+    DecodingParams *dp = ctx->cur_decoding_params;
     MatrixParams *mp = &dp->matrix_params;
     int32_t min = INT32_MAX, max = INT32_MIN;
     int32_t coeff_mask = 0;
@@ -919,16 +928,12 @@ static int code_matrix_coeffs(MLPEncodeContext *ctx,
 }
 
 /** Determines best coefficients to use for the lossless matrix. */
-static void lossless_matrix_coeffs(MLPEncodeContext *ctx, unsigned int substr)
+static void lossless_matrix_coeffs(MLPEncodeContext *ctx)
 {
-    unsigned int index, subblock;
+    DecodingParams *dp = ctx->cur_decoding_params;
+    MatrixParams *mp = &dp->matrix_params;
 
     generate_2_noise_channels(ctx);
-
-    for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++) {
-    for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
-    DecodingParams *dp = &ctx->decoding_params[index][subblock][substr];
-    MatrixParams *mp = &dp->matrix_params;
 
     /* TODO actual decorrelation. */
 
@@ -937,9 +942,7 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx, unsigned int substr)
     mp->coeff[1][2] =  0 << 14;
     mp->coeff[1][3] =  0 << 14;
 
-    mp->count = code_matrix_coeffs(ctx, substr, subblock, index, 1);
-    }
-    }
+    mp->count = code_matrix_coeffs(ctx, 1);
 }
 
 /** Applies output_shift to all channels when it is needed because of shifted
@@ -1627,8 +1630,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
             ctx->prev_decoding_params = &ctx->restart_decoding_params[substr];
             ctx->prev_channel_params = ctx->restart_channel_params;
-            ctx->cur_decoding_params = &ctx->decoding_params[0][0][substr];
-            ctx->cur_channel_params = ctx->channel_params[0][0];
 
             for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
             for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
@@ -1637,11 +1638,33 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             }
             ctx->decoding_params[ctx->frame_index][0][substr].blocksize = 8;
             ctx->decoding_params[ctx->frame_index][1][substr].blocksize = ctx->frame_size[ctx->frame_index] - 8;
-            lossless_matrix_coeffs   (ctx, substr);
+
+            ctx->cur_decoding_params = &ctx->decoding_params[ctx->frame_index][1][substr];
+            ctx->cur_channel_params = ctx->channel_params[ctx->frame_index][1];
+
+            lossless_matrix_coeffs   (ctx);
             output_shift_channels    (ctx);
             rematrix_channels        (ctx);
-            determine_quant_step_size(ctx, substr);
+            determine_quant_step_size(ctx);
             determine_filters        (ctx);
+
+            for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
+                DecodingParams *dp = &ctx->decoding_params[index][0][substr];
+                unsigned int channel;
+
+                copy_matrix_params(&dp->matrix_params, &ctx->cur_decoding_params->matrix_params);
+
+                for (channel = 0; channel < MAX_CHANNELS; channel++) {
+                    ChannelParams *cp = &ctx->channel_params[index][0][channel];
+                    unsigned int filter;
+
+                    dp->quant_step_size[channel] = ctx->cur_decoding_params->quant_step_size[channel];
+
+                    if (index)
+                        for (filter = 0; filter < NUM_FILTERS; filter++)
+                            copy_filter_params(&cp->filter_params[filter], &ctx->cur_channel_params[channel].filter_params[filter]);
+                }
+            }
 
             for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
                 for (subblock = 0; subblock <= num_subblocks; subblock++) {
