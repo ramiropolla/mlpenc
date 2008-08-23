@@ -49,7 +49,8 @@ typedef struct {
     uint8_t         count;                  ///< number of matrices to apply
 
     uint8_t         outch[MAX_MATRICES];    ///< output channel for each matrix
-    int32_t         coeff[MAX_MATRICES][MAX_CHANNELS+2];
+    int32_t         forco[MAX_MATRICES][MAX_CHANNELS+2];    ///< forward coefficients
+    int32_t         coeff[MAX_MATRICES][MAX_CHANNELS+2];    ///< decoding coefficients
     uint8_t         fbits[MAX_CHANNELS];    ///< fraction bits
 
     int8_t          shift[MAX_CHANNELS];    ///< Left shift to apply to decoded PCM values to get final 24-bit output.
@@ -881,6 +882,40 @@ static void generate_2_noise_channels(MLPEncodeContext *ctx)
     rh->noisegen_seed = seed & ((1 << 24)-1);
 }
 
+#define MLP_CHMODE_LEFT_RIGHT   0
+#define MLP_CHMODE_LEFT_SIDE    1
+#define MLP_CHMODE_RIGHT_SIDE   2
+#define MLP_CHMODE_MID_SIDE     3
+
+static int estimate_stereo_mode(MLPEncodeContext *ctx)
+{
+    uint64_t score[4], sum[4] = { 0, 0, 0, 0, };
+    int32_t *right_ch = ctx->sample_buffer + 1;
+    int32_t *left_ch  = ctx->sample_buffer;
+    int i, best = 0;
+
+    for(i = 2; i < ctx->major_frame_size; i++) {
+        int32_t left  = left_ch [i * ctx->num_channels] - 2 * left_ch [(i - 1) * ctx->num_channels] + left_ch [(i - 2) * ctx->num_channels];
+        int32_t right = right_ch[i * ctx->num_channels] - 2 * right_ch[(i - 1) * ctx->num_channels] + right_ch[(i - 2) * ctx->num_channels];
+
+        sum[0] += FFABS( left        );
+        sum[1] += FFABS(        right);
+        sum[2] += FFABS((left + right) >> 1);
+        sum[3] += FFABS( left - right);
+    }
+
+    score[0] = sum[0] + sum[1];
+    score[1] = sum[0] + sum[3];
+    score[2] = sum[1] + sum[3];
+    score[3] = sum[2] + sum[3];
+
+    for(i = 1; i < 4; i++)
+        if(score[i] < score[best])
+            best = i;
+
+    return best;
+}
+
 /** Determines how many fractional bits are needed to encode matrix
  *  coefficients. Also shifts the coefficients to fit within 2.14 bits.
  */
@@ -908,8 +943,10 @@ static void code_matrix_coeffs(MLPEncodeContext *ctx, unsigned int mat)
     shift = FFMAX(0, FFMAX(number_sbits(min), number_sbits(max)) - 16);
 
     if (shift) {
-        for (channel = 0; channel < ctx->num_channels; channel++)
+        for (channel = 0; channel < ctx->num_channels; channel++) {
             mp->coeff[mat][channel] >>= shift;
+            mp->forco[mat][channel] >>= shift;
+        }
 
         coeff_mask >>= shift;
     }
@@ -927,6 +964,7 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
     MatrixParams *mp = &dp->matrix_params;
+    int mode, mat;
 
     /* No decorrelation for mono. */
     if (ctx->num_channels - 2 == 1) {
@@ -936,17 +974,48 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx)
 
     generate_2_noise_channels(ctx);
 
-    /* TODO actual decorrelation. */
+    mode = estimate_stereo_mode(ctx);
 
-    mp->count    = 1;
-    mp->outch[0] = 1;
+    switch(mode) {
+        case MLP_CHMODE_MID_SIDE:
+        case MLP_CHMODE_LEFT_RIGHT:
+            mp->count    = 0;
+            break;
+        case MLP_CHMODE_LEFT_SIDE:
+            mp->count    = 1;
+            mp->outch[0] = 0;
+            mp->coeff[0][0] =  1 << 14; mp->coeff[0][1] =  1 << 14;
+            mp->coeff[0][2] =  0 << 14; mp->coeff[0][2] =  0 << 14;
+            mp->forco[0][0] =  1 << 14; mp->forco[0][1] = -1 << 14;
+            mp->forco[0][2] =  0 << 14; mp->forco[0][2] =  0 << 14;
+            break;
+        case MLP_CHMODE_RIGHT_SIDE:
+            mp->count    = 1;
+            mp->outch[0] = 1;
+            mp->coeff[0][0] =  1 << 14; mp->coeff[0][1] = -1 << 14;
+            mp->coeff[0][2] =  0 << 14; mp->coeff[0][2] =  0 << 14;
+            mp->forco[0][0] =  1 << 14; mp->forco[0][1] = -1 << 14;
+            mp->forco[0][2] =  0 << 14; mp->forco[0][2] =  0 << 14;
+            break;
+#if 0 /* TODO shift all matrix coeffs if any matrix needs it. */
+        case MLP_CHMODE_MID_SIDE:
+            mp->count    = 2;
+            mp->outch[0] = 0;
+            mp->coeff[0][0] =  1 << 13; mp->coeff[0][1] =  1 << 14;
+            mp->coeff[0][2] =  0 << 14; mp->coeff[0][2] =  0 << 14;
+            mp->forco[0][0] =  1 << 14; mp->forco[0][1] = -1 << 14;
+            mp->forco[0][2] =  0 << 14; mp->forco[0][2] =  0 << 14;
+            mp->outch[1] = 1;
+            mp->coeff[1][0] = -1 << 14; mp->coeff[1][1] =  1 << 15;
+            mp->coeff[1][2] =  0 << 14; mp->coeff[1][2] =  0 << 14;
+            mp->forco[1][0] =  1 << 13; mp->forco[1][1] =  1 << 14;
+            mp->forco[1][2] =  0 << 14; mp->forco[1][2] =  0 << 14;
+            break;
+#endif
+    }
 
-    mp->coeff[0][0] =  1 << 14;
-    mp->coeff[0][1] = -1 << 14;
-    mp->coeff[0][2] =  0 << 14;
-    mp->coeff[0][3] =  0 << 14;
-
-    code_matrix_coeffs(ctx, 0);
+    for (mat = 0; mat < mp->count; mat++)
+        code_matrix_coeffs(ctx, mat);
 }
 
 /** Applies output_shift to all channels when it is needed because of shifted
@@ -992,7 +1061,7 @@ static void rematrix_channels(MLPEncodeContext *ctx)
 
             for (src_ch = 0; src_ch < maxchan; src_ch++) {
                 int32_t sample = *(sample_buffer + src_ch);
-                accum += (int64_t) sample * mp->coeff[mat][src_ch];
+                accum += (int64_t) sample * mp->forco[mat][src_ch];
             }
             sample_buffer[outch] = (accum >> 14) & mask;
 
