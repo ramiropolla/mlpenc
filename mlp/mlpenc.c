@@ -1573,6 +1573,32 @@ static unsigned int write_access_unit(MLPEncodeContext *ctx, uint8_t *buf,
     return total_length;
 }
 
+static void copy_restart_frame_params(MLPEncodeContext *ctx,
+                                      unsigned int substr,
+                                      unsigned int min_index,
+                                      unsigned int max_index)
+{
+    unsigned int index;
+
+    for (index = min_index; index < max_index; index++) {
+        DecodingParams *dp = &ctx->decoding_params[index][0][substr];
+        unsigned int channel;
+
+        copy_matrix_params(&dp->matrix_params, &ctx->cur_decoding_params->matrix_params);
+
+        for (channel = 0; channel < MAX_CHANNELS; channel++) {
+            ChannelParams *cp = &ctx->channel_params[index][0][channel];
+            unsigned int filter;
+
+            dp->quant_step_size[channel] = ctx->cur_decoding_params->quant_step_size[channel];
+
+            if (index)
+                for (filter = 0; filter < NUM_FILTERS; filter++)
+                    copy_filter_params(&cp->filter_params[filter], &ctx->cur_channel_params[channel].filter_params[filter]);
+        }
+    }
+}
+
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                             void *data)
 {
@@ -1648,23 +1674,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             determine_quant_step_size(ctx);
             determine_filters        (ctx);
 
-            for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
-                DecodingParams *dp = &ctx->decoding_params[index][0][substr];
-                unsigned int channel;
-
-                copy_matrix_params(&dp->matrix_params, &ctx->cur_decoding_params->matrix_params);
-
-                for (channel = 0; channel < MAX_CHANNELS; channel++) {
-                    ChannelParams *cp = &ctx->channel_params[index][0][channel];
-                    unsigned int filter;
-
-                    dp->quant_step_size[channel] = ctx->cur_decoding_params->quant_step_size[channel];
-
-                    if (index)
-                        for (filter = 0; filter < NUM_FILTERS; filter++)
-                            copy_filter_params(&cp->filter_params[filter], &ctx->cur_channel_params[channel].filter_params[filter]);
-                }
-            }
+            copy_restart_frame_params(ctx, substr, ctx->frame_index, MAJOR_HEADER_INTERVAL);
 
             for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
                 for (subblock = 0; subblock <= num_subblocks; subblock++) {
