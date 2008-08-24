@@ -833,8 +833,8 @@ static void set_filter_params(MLPEncodeContext *ctx,
  */
 static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
 {
-    FilterParams *fp[NUM_FILTERS] = { &ctx->channel_params[ctx->frame_index][0][1][channel].filter_params[FIR],
-                                      &ctx->channel_params[ctx->frame_index][0][1][channel].filter_params[IIR], };
+    FilterParams *fp[NUM_FILTERS] = { &ctx->cur_channel_params[channel].filter_params[FIR],
+                                      &ctx->cur_channel_params[channel].filter_params[IIR], };
     int32_t filter_state_buffer[NUM_FILTERS][ctx->number_of_samples];
     int32_t mask = MSB_MASK(ctx->cur_decoding_params->quant_step_size[channel]);
     int32_t *sample_buffer = ctx->sample_buffer + channel;
