@@ -93,8 +93,8 @@ typedef struct {
     int             sample_fmt;             ///< sample format encoded for MLP
     int             mlp_sample_rate;        ///< sample rate encoded for MLP
 
-    int32_t        *input_buffer;           ///< Pointer to data currently being inputted.
-    int32_t        *major_input_buffer;     ///< Buffer with all data inputted for one entire major frame interval.
+    int32_t        *inout_buffer;           ///< Pointer to data currently being read from lavc or written to bitstream.
+    int32_t        *major_inout_buffer;     ///< Buffer with all in/out data for one entire major frame interval.
     int32_t        *write_buffer;           ///< Pointer to data currently being written to bitstream.
     int32_t        *sample_buffer;          ///< Pointer to current access unit samples.
     int32_t        *major_frame_buffer;     ///< Buffer with all data for one entire major frame interval.
@@ -397,8 +397,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         return -1;
     }
 
-    ctx->major_input_buffer = av_malloc(major_frame_buffer_size);
-    if (!ctx->major_input_buffer) {
+    ctx->major_inout_buffer = av_malloc(major_frame_buffer_size);
+    if (!ctx->major_inout_buffer) {
         av_log(avctx, AV_LOG_ERROR,
                "Not enough memory for buffering samples.\n");
         return -1;
@@ -673,7 +673,7 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         RestartHeader  *rh = &ctx->restart_header [substr];
-        int32_t *sample_buffer = ctx->input_buffer;
+        int32_t *sample_buffer = ctx->inout_buffer;
         int32_t temp_lossless_check_data = 0;
         unsigned int channel;
         int i;
@@ -1564,7 +1564,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
         put_bits(&pb, (-put_bits_count(&pb)) & 15, 0);
 
-        if (ctx->last_frame == ctx->input_buffer) {
+        if (ctx->last_frame == ctx->inout_buffer) {
             /* TODO find a sample and implement shorten_by. */
             put_bits(&pb, 32, END_OF_STREAM);
         }
@@ -1661,7 +1661,7 @@ static void copy_restart_frame_params(MLPEncodeContext *ctx,
 static void input_to_sample_buffer(MLPEncodeContext *ctx)
 {
     int32_t *sample_buffer = ctx->sample_buffer;
-    int32_t *input_buffer = ctx->input_buffer + ctx->starting_frame_index * ctx->one_sample_buffer_size;
+    int32_t *input_buffer = ctx->inout_buffer + ctx->starting_frame_index * ctx->one_sample_buffer_size;
     unsigned int i, channel;
 
     for (i = 0; i < ctx->number_of_samples; i++) {
@@ -1735,7 +1735,7 @@ static void process_major_frame(MLPEncodeContext *ctx)
 {
     unsigned int substr;
 
-    ctx->sample_buffer = ctx->major_input_buffer;
+    ctx->sample_buffer = ctx->major_inout_buffer;
 
     ctx->starting_frame_index = 0;
     ctx->number_of_frames = MAJOR_HEADER_INTERVAL;
@@ -1767,17 +1767,17 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     ctx->frame_index = avctx->frame_number % ctx->major_header_interval;
 
-    ctx->input_buffer = ctx->major_input_buffer
+    ctx->inout_buffer = ctx->major_inout_buffer
                       + ctx->frame_index * ctx->one_sample_buffer_size;
 
-    if (ctx->last_frame == ctx->input_buffer) {
+    if (ctx->last_frame == ctx->inout_buffer) {
         return 0;
     }
 
     ctx->sample_buffer = ctx->major_frame_buffer
                        + ctx->frame_index * ctx->one_sample_buffer_size;
 
-    ctx->write_buffer = ctx->input_buffer;
+    ctx->write_buffer = ctx->inout_buffer;
 
     if (avctx->frame_number < ctx->major_header_interval) {
         if (data) {
@@ -1790,7 +1790,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             ctx->frame_index = 0;
 
             ctx->sample_buffer = ctx->major_frame_buffer;
-            ctx->input_buffer = ctx->major_input_buffer;
+            ctx->inout_buffer = ctx->major_inout_buffer;
         }
     }
 
@@ -1820,7 +1820,7 @@ input_and_return:
         ctx->next_major_frame_size += avctx->frame_size;
         input_data(ctx, data);
     } else if (!ctx->last_frame) {
-        ctx->last_frame = ctx->input_buffer;
+        ctx->last_frame = ctx->inout_buffer;
     }
 
     ctx->frame_index = (avctx->frame_number + 1) % ctx->major_header_interval;
@@ -1831,7 +1831,7 @@ input_and_return:
 
         ctx->sample_buffer = ctx->major_frame_buffer;
 
-        ctx->input_buffer = ctx->major_input_buffer;
+        ctx->inout_buffer = ctx->major_inout_buffer;
 
         ctx->major_frame_size = ctx->next_major_frame_size;
         ctx->next_major_frame_size = 0;
@@ -1858,7 +1858,7 @@ static av_cold int mlp_encode_close(AVCodecContext *avctx)
 
     av_freep(&ctx->lossless_check_data);
     av_freep(&ctx->major_frame_buffer);
-    av_freep(&ctx->major_input_buffer);
+    av_freep(&ctx->major_inout_buffer);
     av_freep(&ctx->lpc_sample_buffer);
     av_freep(&avctx->coded_frame);
     av_freep(&ctx->frame_size);
