@@ -1731,6 +1731,33 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
     }
 }
 
+static void process_major_frame(MLPEncodeContext *ctx)
+{
+    unsigned int substr;
+
+    ctx->sample_buffer = ctx->major_input_buffer;
+
+    ctx->starting_frame_index = 0;
+    ctx->number_of_frames = MAJOR_HEADER_INTERVAL;
+    ctx->number_of_samples = ctx->major_frame_size;
+
+    for (substr = 0; substr < ctx->num_substreams; substr++) {
+        RestartHeader *rh = ctx->cur_restart_header;
+        unsigned int channel;
+
+        ctx->cur_restart_header = &ctx->restart_header[substr];
+
+        ctx->cur_decoding_params = &ctx->major_decoding_params[0][1][substr];
+        ctx->cur_channel_params = ctx->major_channel_params[0][1];
+
+        generate_2_noise_channels(ctx);
+        rematrix_channels        (ctx);
+
+        for (channel = rh->min_channel; channel <= rh->max_channel; channel++)
+            apply_filter(ctx, channel);
+    }
+}
+
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                             void *data)
 {
@@ -1750,7 +1777,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     ctx->sample_buffer = ctx->major_frame_buffer
                        + ctx->frame_index * ctx->one_sample_buffer_size;
 
-    ctx->write_buffer = ctx->sample_buffer;
+    ctx->write_buffer = ctx->input_buffer;
 
     if (avctx->frame_number < ctx->major_header_interval) {
         if (data) {
@@ -1777,6 +1804,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     if (restart_frame) {
         set_major_params(ctx);
+        process_major_frame(ctx);
     }
 
     avctx->coded_frame->key_frame = restart_frame;
