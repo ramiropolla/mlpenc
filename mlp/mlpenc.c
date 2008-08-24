@@ -983,16 +983,16 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx)
             break;
         case MLP_CHMODE_LEFT_SIDE:
             mp->count    = 1;
-            mp->outch[0] = 0;
-            mp->coeff[0][0] =  1 << 14; mp->coeff[0][1] =  1 << 14;
+            mp->outch[0] = 1;
+            mp->coeff[0][0] =  1 << 14; mp->coeff[0][1] = -1 << 14;
             mp->coeff[0][2] =  0 << 14; mp->coeff[0][2] =  0 << 14;
             mp->forco[0][0] =  1 << 14; mp->forco[0][1] = -1 << 14;
             mp->forco[0][2] =  0 << 14; mp->forco[0][2] =  0 << 14;
             break;
         case MLP_CHMODE_RIGHT_SIDE:
             mp->count    = 1;
-            mp->outch[0] = 1;
-            mp->coeff[0][0] =  1 << 14; mp->coeff[0][1] = -1 << 14;
+            mp->outch[0] = 0;
+            mp->coeff[0][0] =  1 << 14; mp->coeff[0][1] =  1 << 14;
             mp->coeff[0][2] =  0 << 14; mp->coeff[0][2] =  0 << 14;
             mp->forco[0][0] =  1 << 14; mp->forco[0][1] = -1 << 14;
             mp->forco[0][2] =  0 << 14; mp->forco[0][2] =  0 << 14;
