@@ -1711,7 +1711,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         return -1;
     }
 
-    restart_frame = !(avctx->frame_number & (ctx->major_header_interval - 1));
+    restart_frame = !(avctx->frame_number % ctx->major_header_interval);
 
     if (restart_frame) {
         unsigned int index, subblock;
