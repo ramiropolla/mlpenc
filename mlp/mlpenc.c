@@ -141,6 +141,11 @@ typedef struct {
     DecodingParams *cur_decoding_params;
     RestartHeader  *cur_restart_header;
 
+    /* Analysis stage. */
+    unsigned int    starting_frame_index;
+    unsigned int    number_of_frames;
+    unsigned int    number_of_samples;
+
     ChannelParams  *prev_channel_params;
     DecodingParams *prev_decoding_params;
 
@@ -734,7 +739,7 @@ static void determine_quant_step_size(MLPEncodeContext *ctx)
 
     memset(sample_mask, 0x00, sizeof(sample_mask));
 
-    for (i = 0; i < ctx->major_frame_size; i++) {
+    for (i = 0; i < ctx->number_of_samples; i++) {
         for (channel = 0; channel <= rh->max_channel; channel++)
             sample_mask[channel] |= *sample_buffer++;
 
@@ -802,12 +807,12 @@ static void set_filter_params(MLPEncodeContext *ctx,
         unsigned int i;
         int order;
 
-        for (i = 0; i < ctx->major_frame_size; i++) {
+        for (i = 0; i < ctx->number_of_samples; i++) {
             *lpc_samples++ = *sample_buffer;
             sample_buffer += ctx->num_channels;
         }
 
-        order = ff_lpc_calc_coefs(&ctx->dsp, ctx->lpc_sample_buffer, ctx->major_frame_size,
+        order = ff_lpc_calc_coefs(&ctx->dsp, ctx->lpc_sample_buffer, ctx->number_of_samples,
                                   MLP_MIN_LPC_ORDER, MLP_MAX_LPC_ORDER, 7,
                                   coefs, shift, 1,
                                   ORDER_METHOD_EST, MLP_MAX_LPC_SHIFT, 0);
@@ -834,10 +839,10 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
 {
     FilterParams *fp[NUM_FILTERS] = { &ctx->channel_params[ctx->frame_index][0][1][channel].filter_params[FIR],
                                       &ctx->channel_params[ctx->frame_index][0][1][channel].filter_params[IIR], };
-    int32_t filter_state_buffer[NUM_FILTERS][ctx->major_frame_size];
+    int32_t filter_state_buffer[NUM_FILTERS][ctx->number_of_samples];
     int32_t mask = MSB_MASK(ctx->cur_decoding_params->quant_step_size[channel]);
     int32_t *sample_buffer = ctx->sample_buffer + channel;
-    unsigned int major_frame_size = ctx->major_frame_size;
+    unsigned int number_of_samples = ctx->number_of_samples;
     unsigned int filter_shift = fp[FIR]->shift;
     int filter;
     int i;
@@ -849,7 +854,7 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
         sample_buffer += ctx->num_channels;
     }
 
-    for (i = 8; i < major_frame_size; i++) {
+    for (i = 8; i < number_of_samples; i++) {
         int32_t sample = *sample_buffer;
         unsigned int order;
         int64_t accum = 0;
@@ -873,7 +878,7 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
     }
 
     sample_buffer = ctx->sample_buffer + channel;
-    for (i = 0; i < major_frame_size; i++) {
+    for (i = 0; i < number_of_samples; i++) {
         *sample_buffer = filter_state_buffer[IIR][i];
 
         sample_buffer += ctx->num_channels;
@@ -890,7 +895,7 @@ static void generate_2_noise_channels(MLPEncodeContext *ctx)
     unsigned int i;
     uint32_t seed = rh->noisegen_seed;
 
-    for (i = 0; i < ctx->major_frame_size; i++) {
+    for (i = 0; i < ctx->number_of_samples; i++) {
         uint16_t seed_shr7 = seed >> 7;
         *sample_buffer++ = ((int8_t)(seed >> 15)) << rh->noise_shift;
         *sample_buffer++ = ((int8_t) seed_shr7)   << rh->noise_shift;
@@ -915,7 +920,7 @@ static int estimate_stereo_mode(MLPEncodeContext *ctx)
     int32_t *left_ch  = ctx->sample_buffer;
     int i, best = 0;
 
-    for(i = 2; i < ctx->major_frame_size; i++) {
+    for(i = 2; i < ctx->number_of_samples; i++) {
         int32_t left  = left_ch [i * ctx->num_channels] - 2 * left_ch [(i - 1) * ctx->num_channels] + left_ch [(i - 2) * ctx->num_channels];
         int32_t right = right_ch[i * ctx->num_channels] - 2 * right_ch[(i - 1) * ctx->num_channels] + right_ch[(i - 2) * ctx->num_channels];
 
@@ -1039,7 +1044,7 @@ static void rematrix_channels(MLPEncodeContext *ctx)
         unsigned int outch = mp->outch[mat];
 
         sample_buffer = ctx->sample_buffer;
-        for (i = 0; i < ctx->major_frame_size; i++) {
+        for (i = 0; i < ctx->number_of_samples; i++) {
             unsigned int src_ch;
             int64_t accum = 0;
 
@@ -1635,13 +1640,11 @@ static unsigned int write_access_unit(MLPEncodeContext *ctx, uint8_t *buf,
 }
 
 static void copy_restart_frame_params(MLPEncodeContext *ctx,
-                                      unsigned int substr,
-                                      unsigned int min_index,
-                                      unsigned int max_index)
+                                      unsigned int substr)
 {
     unsigned int index;
 
-    for (index = min_index; index < max_index; index++) {
+    for (index = 0; index < ctx->number_of_frames; index++) {
         DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][index][0][substr];
         unsigned int channel;
 
@@ -1661,13 +1664,13 @@ static void copy_restart_frame_params(MLPEncodeContext *ctx,
     }
 }
 
-static void input_to_sample_buffer(MLPEncodeContext *ctx, unsigned int size)
+static void input_to_sample_buffer(MLPEncodeContext *ctx)
 {
     int32_t *sample_buffer = ctx->sample_buffer;
-    int32_t *input_buffer = ctx->input_buffer;
+    int32_t *input_buffer = ctx->input_buffer + ctx->starting_frame_index * ctx->input_buffer_frame_size;
     unsigned int i, channel;
 
-    for (i = 0; i < size; i++) {
+    for (i = 0; i < ctx->number_of_samples; i++) {
         for (channel = 0; channel < ctx->avctx->channels; channel++)
             *sample_buffer++ = *input_buffer++;
         sample_buffer += 2; /* noise_channels */
@@ -1756,20 +1759,22 @@ input_and_return:
     if (restart_frame) {
         unsigned int index, subblock;
 
-        ctx->sample_buffer = ctx->major_frame_buffer
-                           + ctx->frame_index * ctx->one_sample_buffer_size;
+        ctx->sample_buffer = ctx->major_frame_buffer;
 
-        ctx->input_buffer = ctx->major_input_buffer
-                          + ctx->frame_index * ctx->input_buffer_frame_size;
-
-        for (index = 0; index < MAJOR_HEADER_INTERVAL; index++)
-            for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
-                clear_channel_params(ctx->channel_params[ctx->frame_index][index][subblock]);
+        ctx->input_buffer = ctx->major_input_buffer;
 
         ctx->major_frame_size = ctx->next_major_frame_size;
         ctx->next_major_frame_size = 0;
 
-        input_to_sample_buffer(ctx, ctx->major_frame_size);
+        ctx->starting_frame_index = 0;
+        ctx->number_of_frames = MAJOR_HEADER_INTERVAL;
+        ctx->number_of_samples = ctx->major_frame_size;
+
+        for (index = 0; index < ctx->number_of_frames; index++)
+            for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
+                clear_channel_params(ctx->channel_params[ctx->frame_index][index][subblock]);
+
+        input_to_sample_buffer(ctx);
 
         for (substr = 0; substr < ctx->num_substreams; substr++) {
             unsigned int num_subblocks = 1;
@@ -1780,7 +1785,7 @@ input_and_return:
             ctx->prev_channel_params = ctx->restart_channel_params;
 
             for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
-            for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
+            for (index = 0; index < ctx->number_of_frames; index++) {
                 DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][index][subblock][substr];
                 dp->blocksize = ctx->frame_size[index];
             }
@@ -1795,9 +1800,9 @@ input_and_return:
             determine_quant_step_size(ctx);
             determine_filters        (ctx);
 
-            copy_restart_frame_params(ctx, substr, ctx->frame_index, MAJOR_HEADER_INTERVAL);
+            copy_restart_frame_params(ctx, substr);
 
-            for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
+            for (index = 0; index < ctx->number_of_frames; index++) {
                 for (subblock = 0; subblock <= num_subblocks; subblock++) {
                     ctx->cur_decoding_params = &ctx->decoding_params[ctx->frame_index][index][subblock][substr];
                     ctx->cur_channel_params = ctx->channel_params[ctx->frame_index][index][subblock];
