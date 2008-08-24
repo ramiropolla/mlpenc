@@ -974,8 +974,6 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx)
         return;
     }
 
-    generate_2_noise_channels(ctx);
-
     mode = estimate_stereo_mode(ctx);
 
     switch(mode) {
@@ -1709,6 +1707,7 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
         ctx->cur_decoding_params = &ctx->decoding_params[ctx->frame_index][0][1][substr];
         ctx->cur_channel_params = ctx->channel_params[ctx->frame_index][0][1];
 
+        generate_2_noise_channels(ctx);
         lossless_matrix_coeffs   (ctx);
         rematrix_channels        (ctx);
         determine_quant_step_size(ctx);
