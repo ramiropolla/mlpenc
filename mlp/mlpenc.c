@@ -135,6 +135,7 @@ typedef struct {
 
     ChannelParams   major_channel_params[MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_CHANNELS];       ///< ChannelParams to be written to bitstream.
     DecodingParams  major_decoding_params[MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];    ///< DecodingParams to be written to bitstream.
+    int             major_params_changed[MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];     ///< params_changed to be written to bitstream.
 
     ChannelParams  *cur_channel_params;
     DecodingParams *cur_decoding_params;
@@ -1530,7 +1531,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
             ctx->cur_decoding_params = &ctx->major_decoding_params[ctx->frame_index][subblock][substr];
             ctx->cur_channel_params = ctx->major_channel_params[ctx->frame_index][subblock];
 
-            params_changed = ctx->params_changed[ctx->frame_index][subblock][substr];
+            params_changed = ctx->major_params_changed[ctx->frame_index][subblock][substr];
 
             if (restart_frame || params_changed) {
                 put_bits(&pb, 1, 1);
@@ -1679,6 +1680,7 @@ static void set_major_params(MLPEncodeContext *ctx)
 {
     memcpy(ctx->major_channel_params, ctx->channel_params, sizeof(ctx->channel_params));
     memcpy(ctx->major_decoding_params, ctx->decoding_params, sizeof(ctx->decoding_params));
+    memcpy(ctx->major_params_changed, ctx->params_changed, sizeof(ctx->params_changed));
 }
 
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
