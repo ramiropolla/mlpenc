@@ -133,6 +133,9 @@ typedef struct {
     ChannelParams   restart_channel_params[MAX_CHANNELS];
     DecodingParams  restart_decoding_params[MAX_SUBSTREAMS];
 
+    ChannelParams   major_channel_params[MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_CHANNELS];       ///< ChannelParams to be written to bitstream.
+    DecodingParams  major_decoding_params[MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];    ///< DecodingParams to be written to bitstream.
+
     ChannelParams  *cur_channel_params;
     DecodingParams *cur_decoding_params;
     RestartHeader  *cur_restart_header;
@@ -1524,8 +1527,8 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
         for (subblock = 0; subblock <= num_subblocks; subblock++) {
 
-            ctx->cur_decoding_params = &ctx->decoding_params[ctx->frame_index][subblock][substr];
-            ctx->cur_channel_params = ctx->channel_params[ctx->frame_index][subblock];
+            ctx->cur_decoding_params = &ctx->major_decoding_params[ctx->frame_index][subblock][substr];
+            ctx->cur_channel_params = ctx->major_channel_params[ctx->frame_index][subblock];
 
             params_changed = ctx->params_changed[ctx->frame_index][subblock][substr];
 
@@ -1668,6 +1671,16 @@ static void input_to_sample_buffer(MLPEncodeContext *ctx, unsigned int size)
     }
 }
 
+/** Analyzes all collected bitcounts and selects the best parameters for each
+ *  individual access unit.
+ *  TODO This is just a stub!
+ */
+static void set_major_params(MLPEncodeContext *ctx)
+{
+    memcpy(ctx->major_channel_params, ctx->channel_params, sizeof(ctx->channel_params));
+    memcpy(ctx->major_decoding_params, ctx->decoding_params, sizeof(ctx->decoding_params));
+}
+
 static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                             void *data)
 {
@@ -1712,6 +1725,10 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     }
 
     restart_frame = !ctx->frame_index;
+
+    if (restart_frame) {
+        set_major_params(ctx);
+    }
 
     avctx->coded_frame->key_frame = restart_frame;
 
