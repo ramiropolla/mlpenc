@@ -471,9 +471,7 @@ static int inline number_sbits(int number)
  *  coefficients, and if it's possible to right-shift their values without
  *  losing any precision.
  */
-static void code_filter_coeffs(MLPEncodeContext *ctx,
-                               FilterParams *fp,
-                               int *pcoeff_shift, int *pcoeff_bits)
+static void code_filter_coeffs(MLPEncodeContext *ctx, FilterParams *fp)
 {
     int min = INT_MAX, max = INT_MIN;
     int bits, shift;
@@ -495,8 +493,8 @@ static void code_filter_coeffs(MLPEncodeContext *ctx,
 
     for (shift = 0; shift < 7 && !(coeff_mask & (1<<shift)); shift++);
 
-    *pcoeff_bits  = bits;
-    *pcoeff_shift = shift;
+    fp->coeff_bits  = bits;
+    fp->coeff_shift = shift;
 }
 
 /** Writes filter parameters for one filter to the bitstream. */
@@ -508,18 +506,14 @@ static void write_filter_params(MLPEncodeContext *ctx, PutBitContext *pb,
     put_bits(pb, 4, fp->order);
 
     if (fp->order > 0) {
-        int coeff_shift;
-        int coeff_bits;
         int i;
 
-        code_filter_coeffs(ctx, fp, &coeff_shift, &coeff_bits);
-
         put_bits(pb, 4, fp->shift  );
-        put_bits(pb, 5, coeff_bits );
-        put_bits(pb, 3, coeff_shift);
+        put_bits(pb, 5, fp->coeff_bits );
+        put_bits(pb, 3, fp->coeff_shift);
 
         for (i = 0; i < fp->order; i++) {
-            put_sbits(pb, coeff_bits, fp->coeff[i] >> coeff_shift);
+            put_sbits(pb, fp->coeff_bits, fp->coeff[i] >> fp->coeff_shift);
         }
 
         /* TODO state data for IIR filter. */
@@ -755,6 +749,9 @@ static void copy_filter_params(FilterParams *dst, FilterParams *src)
 
         dst->shift = src->shift;
 
+        dst->coeff_shift = src->coeff_shift;
+        dst->coeff_bits = src->coeff_bits;
+
         for (order = 0; order < dst->order; order++)
             dst->coeff[order] = src->coeff[order];
     }
@@ -818,6 +815,8 @@ static void set_filter_params(MLPEncodeContext *ctx,
 
         for (i = 0; i < order; i++)
             fp->coeff[i] = coefs[order-1][i];
+
+        code_filter_coeffs(ctx, fp);
     }
 }
 
