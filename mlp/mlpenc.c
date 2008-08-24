@@ -222,7 +222,7 @@ static int compare_decoding_params(MLPEncodeContext *ctx)
     DecodingParams *dp = ctx->cur_decoding_params;
     MatrixParams *prev_mp = &prev->matrix_params;
     MatrixParams *mp = &dp->matrix_params;
-    RestartHeader  *rh = ctx->restart_header;
+    RestartHeader  *rh = ctx->cur_restart_header;
     unsigned int ch;
     int retval = 0;
 
@@ -704,7 +704,7 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
                                   int params_changed)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
-    RestartHeader  *rh = ctx->restart_header;
+    RestartHeader  *rh = ctx->cur_restart_header;
     MatrixParams *mp = &dp->matrix_params;
     unsigned int ch;
 
@@ -801,7 +801,7 @@ static void write_decoding_params(MLPEncodeContext *ctx, PutBitContext *pb,
 static void write_block_data(MLPEncodeContext *ctx, PutBitContext *pb)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
-    RestartHeader  *rh = ctx->restart_header;
+    RestartHeader  *rh = ctx->cur_restart_header;
     int32_t *sample_buffer = ctx->write_buffer;
     int32_t sign_huff_offset[MAX_CHANNELS];
     int codebook_index      [MAX_CHANNELS];
@@ -1105,7 +1105,7 @@ static int number_trailing_zeroes(int32_t sample)
 static void determine_quant_step_size(MLPEncodeContext *ctx)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
-    RestartHeader  *rh = ctx->restart_header;
+    RestartHeader  *rh = ctx->cur_restart_header;
     MatrixParams *mp = &dp->matrix_params;
     int32_t *sample_buffer = ctx->sample_buffer;
     int32_t sample_mask[MAX_CHANNELS];
@@ -1214,7 +1214,7 @@ static void set_filter_params(MLPEncodeContext *ctx,
  */
 static void determine_filters(MLPEncodeContext *ctx)
 {
-    RestartHeader *rh = ctx->restart_header;
+    RestartHeader *rh = ctx->cur_restart_header;
     int channel, filter;
 
     for (channel = rh->min_channel; channel <= rh->max_channel; channel++) {
@@ -1521,7 +1521,7 @@ static inline void codebook_bits(MLPEncodeContext *ctx,
 static void determine_bits(MLPEncodeContext *ctx)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
-    RestartHeader  *rh = ctx->restart_header;
+    RestartHeader  *rh = ctx->cur_restart_header;
     unsigned int channel;
 
     for (channel = 0; channel <= rh->max_channel; channel++) {
@@ -1636,7 +1636,7 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
 
 static void apply_filters(MLPEncodeContext *ctx)
 {
-    RestartHeader *rh = ctx->restart_header;
+    RestartHeader *rh = ctx->cur_restart_header;
     int channel;
 
     for (channel = rh->min_channel; channel <= rh->max_channel; channel++) {
@@ -1654,7 +1654,7 @@ static void apply_filters(MLPEncodeContext *ctx)
 static void generate_2_noise_channels(MLPEncodeContext *ctx)
 {
     int32_t *sample_buffer = ctx->sample_buffer + ctx->num_channels - 2;
-    RestartHeader *rh = ctx->restart_header;
+    RestartHeader *rh = ctx->cur_restart_header;
     unsigned int i;
     uint32_t seed = rh->noisegen_seed;
 
