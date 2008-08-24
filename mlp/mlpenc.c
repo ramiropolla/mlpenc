@@ -1208,8 +1208,6 @@ static void set_filter_params(MLPEncodeContext *ctx,
     }
 }
 
-static int apply_filter(MLPEncodeContext *ctx, unsigned int channel);
-
 /** Tries to determine a good prediction filter, and applies it to the samples
  *  buffer if the filter is good enough. Sets the filter data to be cleared if
  *  no good filter was found.
@@ -1222,13 +1220,6 @@ static void determine_filters(MLPEncodeContext *ctx)
     for (channel = rh->min_channel; channel <= rh->max_channel; channel++) {
         for (filter = 0; filter < NUM_FILTERS; filter++)
             set_filter_params(ctx, channel, filter, 0);
-        if (apply_filter(ctx, channel) < 0) {
-            /* Filter is horribly wrong.
-             * Clear filter params and update state. */
-            set_filter_params(ctx, channel, FIR, 1);
-            set_filter_params(ctx, channel, IIR, 1);
-            apply_filter(ctx, channel);
-        }
     }
 }
 
@@ -1643,6 +1634,22 @@ static int apply_filter(MLPEncodeContext *ctx, unsigned int channel)
     return 0;
 }
 
+static void apply_filters(MLPEncodeContext *ctx)
+{
+    RestartHeader *rh = ctx->restart_header;
+    int channel;
+
+    for (channel = rh->min_channel; channel <= rh->max_channel; channel++) {
+        if (apply_filter(ctx, channel) < 0) {
+            /* Filter is horribly wrong.
+             * Clear filter params and update state. */
+            set_filter_params(ctx, channel, FIR, 1);
+            set_filter_params(ctx, channel, IIR, 1);
+            apply_filter(ctx, channel);
+        }
+    }
+}
+
 /** Generates two noise channels worth of data. */
 static void generate_2_noise_channels(MLPEncodeContext *ctx)
 {
@@ -1739,6 +1746,7 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
         rematrix_channels        (ctx);
         determine_quant_step_size(ctx);
         determine_filters        (ctx);
+        apply_filters            (ctx);
 
         copy_restart_frame_params(ctx, substr);
 
