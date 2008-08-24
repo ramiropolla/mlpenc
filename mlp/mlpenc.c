@@ -706,6 +706,7 @@ static void determine_quant_step_size(MLPEncodeContext *ctx)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
     RestartHeader  *rh = ctx->restart_header;
+    MatrixParams *mp = &dp->matrix_params;
     int32_t *sample_buffer = ctx->sample_buffer;
     int32_t sample_mask[MAX_CHANNELS];
     unsigned int channel;
@@ -721,7 +722,7 @@ static void determine_quant_step_size(MLPEncodeContext *ctx)
     }
 
     for (channel = 0; channel <= rh->max_channel; channel++)
-        dp->quant_step_size[channel] = number_trailing_zeroes(sample_mask[channel]);
+        dp->quant_step_size[channel] = number_trailing_zeroes(sample_mask[channel]) - mp->shift[channel];
 }
 
 static void copy_filter_params(FilterParams *dst, FilterParams *src)
@@ -923,40 +924,18 @@ static void code_matrix_coeffs(MLPEncodeContext *ctx, unsigned int mat)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
     MatrixParams *mp = &dp->matrix_params;
-    int32_t min = INT32_MAX, max = INT32_MIN;
     int32_t coeff_mask = 0;
     unsigned int channel;
-    unsigned int shift;
     unsigned int bits;
 
     for (channel = 0; channel < ctx->num_channels; channel++) {
         int32_t coeff = mp->coeff[mat][channel];
-
-        if (coeff < min)
-            min = coeff;
-        if (coeff > max)
-            max = coeff;
-
         coeff_mask |= coeff;
-    }
-
-    shift = FFMAX(0, FFMAX(number_sbits(min), number_sbits(max)) - 16);
-
-    if (shift) {
-        for (channel = 0; channel < ctx->num_channels; channel++) {
-            mp->coeff[mat][channel] >>= shift;
-            mp->forco[mat][channel] >>= shift;
-        }
-
-        coeff_mask >>= shift;
     }
 
     for (bits = 0; bits < 14 && !(coeff_mask & (1<<bits)); bits++);
 
     mp->fbits   [mat] = 14 - bits;
-
-    for (channel = 0; channel < ctx->num_channels; channel++)
-        mp->shift[channel] = shift;
 }
 
 /** Determines best coefficients to use for the lossless matrix. */
@@ -964,6 +943,8 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
     MatrixParams *mp = &dp->matrix_params;
+    unsigned int shift = 0;
+    unsigned int channel;
     int mode, mat;
 
     /* No decorrelation for mono. */
@@ -1001,42 +982,25 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx)
         case MLP_CHMODE_MID_SIDE:
             mp->count    = 2;
             mp->outch[0] = 0;
-            mp->coeff[0][0] =  1 << 13; mp->coeff[0][1] =  1 << 14;
+            mp->coeff[0][0] =  1 << 12; mp->coeff[0][1] =  1 << 13;
             mp->coeff[0][2] =  0 << 14; mp->coeff[0][2] =  0 << 14;
             mp->forco[0][0] =  1 << 14; mp->forco[0][1] = -1 << 14;
             mp->forco[0][2] =  0 << 14; mp->forco[0][2] =  0 << 14;
             mp->outch[1] = 1;
-            mp->coeff[1][0] = -1 << 14; mp->coeff[1][1] =  1 << 15;
+            mp->coeff[1][0] = -1 << 14; mp->coeff[1][1] =  1 << 14;
             mp->coeff[1][2] =  0 << 14; mp->coeff[1][2] =  0 << 14;
             mp->forco[1][0] =  1 << 13; mp->forco[1][1] =  1 << 14;
             mp->forco[1][2] =  0 << 14; mp->forco[1][2] =  0 << 14;
+            shift = 1;
             break;
 #endif
     }
 
     for (mat = 0; mat < mp->count; mat++)
         code_matrix_coeffs(ctx, mat);
-}
 
-/** Applies output_shift to all channels when it is needed because of shifted
- *  matrix coefficients.
- */
-static void output_shift_channels(MLPEncodeContext *ctx)
-{
-    DecodingParams *dp = ctx->cur_decoding_params;
-    MatrixParams *mp = &dp->matrix_params;
-    int32_t *sample_buffer = ctx->sample_buffer;
-    unsigned int i;
-
-    for (i = 0; i < ctx->major_frame_size; i++) {
-        unsigned int channel;
-
-        for (channel = 0; channel < ctx->num_channels - 2; channel++) {
-            *sample_buffer++ >>= mp->shift[channel];
-        }
-
-        sample_buffer += 2;
-    }
+    for (channel = 0; channel < ctx->num_channels; channel++)
+        mp->shift[channel] = shift;
 }
 
 /** Rematrixes all channels using chosen coefficients. */
@@ -1670,6 +1634,7 @@ static void copy_restart_frame_params(MLPEncodeContext *ctx,
             unsigned int filter;
 
             dp->quant_step_size[channel] = ctx->cur_decoding_params->quant_step_size[channel];
+            dp->matrix_params.shift[channel] = ctx->cur_decoding_params->matrix_params.shift[channel];
 
             if (index)
                 for (filter = 0; filter < NUM_FILTERS; filter++)
@@ -1748,7 +1713,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             ctx->cur_channel_params = ctx->channel_params[ctx->frame_index][1];
 
             lossless_matrix_coeffs   (ctx);
-            output_shift_channels    (ctx);
             rematrix_channels        (ctx);
             determine_quant_step_size(ctx);
             determine_filters        (ctx);
