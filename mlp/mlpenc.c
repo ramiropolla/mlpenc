@@ -1376,8 +1376,9 @@ static int compare_filter_params(FilterParams *prev, FilterParams *fp)
 /** Compare two primitive matrices and returns 1 if anything has changed.
  *  Returns 0 if they are both equal.
  */
-static int compare_matrix_params(RestartHeader *rh, MatrixParams *prev, MatrixParams *mp)
+static int compare_matrix_params(MLPEncodeContext *ctx, MatrixParams *prev, MatrixParams *mp)
 {
+    RestartHeader *rh = ctx->cur_restart_header;
     unsigned int channel, mat;
 
     if (prev->count != mp->count)
@@ -1394,7 +1395,7 @@ static int compare_matrix_params(RestartHeader *rh, MatrixParams *prev, MatrixPa
         if (prev->outch[mat] != mp->outch[mat])
             return 1;
 
-        for (channel = rh->min_channel; channel <= rh->max_channel; channel++)
+        for (channel = 0; channel < ctx->num_channels; channel++)
             if (prev->coeff[mat][channel] != mp->coeff[mat][channel])
                 return 1;
     }
@@ -1421,7 +1422,7 @@ static int compare_decoding_params(MLPEncodeContext *ctx)
     if (prev->blocksize != dp->blocksize)
         retval |= PARAM_BLOCKSIZE;
 
-    if (compare_matrix_params(rh, prev_mp, mp))
+    if (compare_matrix_params(ctx, prev_mp, mp))
         retval |= PARAM_MATRIX;
 
     for (ch = 0; ch <= rh->max_matrix_channel; ch++)
