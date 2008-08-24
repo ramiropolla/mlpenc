@@ -1705,12 +1705,6 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         return 0;
     }
 
-    if (ctx->frame_size[ctx->frame_index] > MAX_BLOCKSIZE) {
-        av_log(avctx, AV_LOG_ERROR, "Invalid frame size (%d > %d)\n",
-               ctx->frame_size[ctx->frame_index], MAX_BLOCKSIZE);
-        return -1;
-    }
-
     ctx->sample_buffer = ctx->major_frame_buffer
                        + ctx->frame_index * ctx->one_sample_buffer_size;
 
@@ -1729,6 +1723,12 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
             ctx->sample_buffer = ctx->major_frame_buffer;
             ctx->input_buffer = ctx->major_input_buffer;
         }
+    }
+
+    if (ctx->frame_size[ctx->frame_index] > MAX_BLOCKSIZE) {
+        av_log(avctx, AV_LOG_ERROR, "Invalid frame size (%d > %d)\n",
+               ctx->frame_size[ctx->frame_index], MAX_BLOCKSIZE);
+        return -1;
     }
 
     restart_frame = !ctx->frame_index;
