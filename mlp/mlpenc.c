@@ -910,7 +910,7 @@ static int estimate_stereo_mode(MLPEncodeContext *ctx)
     score[2] = sum[1] + sum[3];
     score[3] = sum[2] + sum[3];
 
-    for(i = 1; i < 4; i++)
+    for(i = 1; i < 3; i++)
         if(score[i] < score[best])
             best = i;
 
