@@ -1647,7 +1647,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
                             void *data)
 {
     MLPEncodeContext *ctx = avctx->priv_data;
-    unsigned int bytes_written;
+    unsigned int bytes_written = 0;
     unsigned int substr;
     int restart_frame;
 
