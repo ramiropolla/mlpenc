@@ -110,7 +110,6 @@ typedef struct {
     unsigned int   *frame_size;             ///< Array with number of samples/channel in each access unit.
     unsigned int    frame_index;            ///< Index of current frame being encoded.
 
-    unsigned int    input_buffer_frame_size;    ///< Number of samples*(input)channels for one access unit.
     unsigned int    one_sample_buffer_size; ///< Number of samples*channel for one access unit.
 
     unsigned int    major_header_interval;  ///< Interval of access units in between two major frames.
@@ -334,7 +333,6 @@ static void default_decoding_params(MLPEncodeContext *ctx,
 static av_cold int mlp_encode_init(AVCodecContext *avctx)
 {
     MLPEncodeContext *ctx = avctx->priv_data;
-    unsigned int major_input_buffer_size;
     unsigned int major_frame_buffer_size;
     unsigned int lossless_check_data_size;
     unsigned int lpc_sample_buffer_size;
@@ -399,11 +397,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         return -1;
     }
 
-    ctx->input_buffer_frame_size = avctx->frame_size * avctx->channels;
-    major_input_buffer_size = ctx->input_buffer_frame_size
-                            * ctx->major_header_interval * sizeof(int32_t);
-
-    ctx->major_input_buffer = av_malloc(major_input_buffer_size);
+    ctx->major_input_buffer = av_malloc(major_frame_buffer_size);
     if (!ctx->major_input_buffer) {
         av_log(avctx, AV_LOG_ERROR,
                "Not enough memory for buffering samples.\n");
@@ -694,6 +688,8 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
                 temp_lossless_check_data ^= (sample & 0x00ffffff) << channel;
                 *sample_buffer++ = sample;
             }
+
+            sample_buffer += 2; /* noise channels */
         }
 
         *lossless_check_data++ = temp_lossless_check_data;
@@ -1667,13 +1663,14 @@ static void copy_restart_frame_params(MLPEncodeContext *ctx,
 static void input_to_sample_buffer(MLPEncodeContext *ctx)
 {
     int32_t *sample_buffer = ctx->sample_buffer;
-    int32_t *input_buffer = ctx->input_buffer + ctx->starting_frame_index * ctx->input_buffer_frame_size;
+    int32_t *input_buffer = ctx->input_buffer + ctx->starting_frame_index * ctx->one_sample_buffer_size;
     unsigned int i, channel;
 
     for (i = 0; i < ctx->number_of_samples; i++) {
         for (channel = 0; channel < ctx->avctx->channels; channel++)
             *sample_buffer++ = *input_buffer++;
         sample_buffer += 2; /* noise_channels */
+        input_buffer += 2; /* noise_channels */
     }
 }
 
@@ -1745,7 +1742,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     ctx->frame_index = avctx->frame_number % ctx->major_header_interval;
 
     ctx->input_buffer = ctx->major_input_buffer
-                      + ctx->frame_index * ctx->input_buffer_frame_size;
+                      + ctx->frame_index * ctx->one_sample_buffer_size;
 
     if (ctx->last_frame == ctx->input_buffer) {
         return 0;
