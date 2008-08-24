@@ -1711,13 +1711,9 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
         return -1;
     }
 
-    restart_frame = !(avctx->frame_number % ctx->major_header_interval);
+    restart_frame = !ctx->frame_index;
 
-    if (restart_frame) {
-        avctx->coded_frame->key_frame = 1;
-    } else {
-        avctx->coded_frame->key_frame = 0;
-    }
+    avctx->coded_frame->key_frame = restart_frame;
 
     bytes_written = write_access_unit(ctx, buf, buf_size, restart_frame);
 
@@ -1734,7 +1730,7 @@ input_and_return:
     }
 
     ctx->frame_index = (avctx->frame_number + 1) % ctx->major_header_interval;
-    restart_frame = !((avctx->frame_number + 1) % ctx->major_header_interval);
+    restart_frame = !ctx->frame_index;
 
     if (restart_frame) {
         unsigned int index, subblock;
