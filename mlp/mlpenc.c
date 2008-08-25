@@ -1357,6 +1357,8 @@ typedef struct BestOffset {
     int16_t offset;
     int bitcount;
     int lsb_bits;
+    int16_t min;
+    int16_t max;
 } BestOffset;
 
 /** Determines the least amount of bits needed to encode the samples using no
@@ -1414,7 +1416,7 @@ static void no_codebook_bits(MLPEncodeContext *ctx,
 static inline void codebook_bits_offset(MLPEncodeContext *ctx,
                                         unsigned int channel, int codebook,
                                         int32_t sample_min, int32_t sample_max,
-                                        int16_t offset, BestOffset *bo, int *pnext, int up)
+                                        int16_t offset, BestOffset *bo)
 {
     int32_t codebook_min = codebook_extremes[codebook][0];
     int32_t codebook_max = codebook_extremes[codebook][1];
@@ -1423,7 +1425,7 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx,
     int codebook_offset  = 7 + (2 - codebook);
     int32_t unsign_offset = offset;
     int lsb_bits = 0, bitcount = 0;
-    int next = INT_MAX;
+    int offset_min = INT_MAX, offset_max = INT_MAX;
     int unsign, mask;
     int i;
 
@@ -1446,17 +1448,17 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx,
 
     for (i = 0; i < dp->blocksize; i++) {
         int32_t sample = *sample_buffer >> dp->quant_step_size[channel];
-        int temp_next;
+        int temp_min, temp_max;
 
         sample -= unsign_offset;
 
-        if (up)
-            temp_next = unsign - (sample & mask);
-        else
-            temp_next = (sample & mask) + 1;
+        temp_min = sample & mask;
+        if (temp_min < offset_min)
+            offset_min = temp_min;
 
-        if (temp_next < next)
-            next = temp_next;
+        temp_max = unsign - temp_min - 1;
+        if (temp_max < offset_max)
+            offset_max = temp_max;
 
         sample >>= lsb_bits;
 
@@ -1468,8 +1470,8 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx,
     bo->offset   = offset;
     bo->lsb_bits = lsb_bits;
     bo->bitcount = lsb_bits * dp->blocksize + bitcount;
-
-    *pnext       = next;
+    bo->min      = FFMAX(offset - offset_min, HUFF_OFFSET_MIN);
+    bo->max      = FFMIN(offset + offset_max, HUFF_OFFSET_MAX);
 }
 
 /** Determines the least amount of bits needed to encode the samples using a
@@ -1484,7 +1486,6 @@ static inline void codebook_bits(MLPEncodeContext *ctx,
     int previous_count = INT_MAX;
     int offset_min, offset_max;
     int is_greater = 0;
-    int next;
 
     offset_min = FFMAX(min, HUFF_OFFSET_MIN);
     offset_max = FFMIN(max, HUFF_OFFSET_MAX);
@@ -1494,7 +1495,7 @@ static inline void codebook_bits(MLPEncodeContext *ctx,
 
         codebook_bits_offset(ctx, channel, codebook,
                              min, max, offset,
-                             &temp_bo, &next, direction);
+                             &temp_bo);
 
         if (temp_bo.bitcount < previous_count) {
             if (temp_bo.bitcount < bo->bitcount)
@@ -1507,11 +1508,11 @@ static inline void codebook_bits(MLPEncodeContext *ctx,
         previous_count = temp_bo.bitcount;
 
         if (direction) {
-            offset += next;
+            offset = temp_bo.max + 1;
             if (offset > offset_max)
                 break;
         } else {
-            offset -= next;
+            offset = temp_bo.min - 1;
             if (offset < offset_min)
                 break;
         }
@@ -1551,7 +1552,7 @@ static void determine_bits(MLPEncodeContext *ctx)
         no_codebook_bits(ctx, channel, min, max, &bo);
 
         for (i = 1; i < 4; i++) {
-            BestOffset temp_bo = { 0, INT_MAX, 0, };
+            BestOffset temp_bo = { 0, INT_MAX, 0, 0, 0, };
 
             codebook_bits(ctx, channel, i - 1, average,
                           min, max, &temp_bo, 0);
