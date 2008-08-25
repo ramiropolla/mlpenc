@@ -1413,8 +1413,8 @@ static void no_codebook_bits(MLPEncodeContext *ctx,
  */
 static inline void codebook_bits_offset(MLPEncodeContext *ctx,
                                         unsigned int channel, int codebook,
-                                        int32_t min, int32_t max, int16_t offset,
-                                        BestOffset *bo, int *pnext, int up)
+                                        int32_t sample_min, int32_t sample_max,
+                                        int16_t offset, BestOffset *bo, int *pnext, int up)
 {
     int32_t codebook_min = codebook_extremes[codebook][0];
     int32_t codebook_max = codebook_extremes[codebook][1];
@@ -1427,13 +1427,13 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx,
     int unsign, mask;
     int i;
 
-    min -= offset;
-    max -= offset;
+    sample_min -= offset;
+    sample_max -= offset;
 
-    while (min < codebook_min || max > codebook_max) {
+    while (sample_min < codebook_min || sample_max > codebook_max) {
         lsb_bits++;
-        min >>= 1;
-        max >>= 1;
+        sample_min >>= 1;
+        sample_max >>= 1;
     }
 
     unsign = 1 << lsb_bits;
