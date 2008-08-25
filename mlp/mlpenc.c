@@ -1868,8 +1868,12 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     if (restart_frame) {
         set_major_params(ctx);
+        if (ctx->major_header_subinterval != ctx->major_header_interval)
         process_major_frame(ctx);
     }
+
+    if (ctx->major_header_subinterval == ctx->major_header_interval)
+        ctx->write_buffer = ctx->sample_buffer;
 
     avctx->coded_frame->key_frame = restart_frame;
 
