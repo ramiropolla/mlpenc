@@ -1873,6 +1873,9 @@ input_and_return:
         ctx->major_frame_size = ctx->next_major_frame_size;
         ctx->next_major_frame_size = 0;
 
+        if (!ctx->major_frame_size)
+            goto no_data_left;
+
         ctx->starting_frame_index = 0;
         ctx->number_of_frames = MAJOR_HEADER_INTERVAL;
         ctx->number_of_samples = ctx->major_frame_size;
@@ -1885,6 +1888,8 @@ input_and_return:
 
         analyze_sample_buffer(ctx);
     }
+
+no_data_left:
 
     return bytes_written;
 }
