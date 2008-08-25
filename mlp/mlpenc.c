@@ -1555,10 +1555,17 @@ static void determine_bits(MLPEncodeContext *ctx)
 
         for (i = 1; i < 4; i++) {
             BestOffset temp_bo = { 0, INT_MAX, 0, 0, 0, };
+            int16_t offset_max;
 
-            codebook_bits(ctx, channel, i - 1, offset,
+            codebook_bits_offset(ctx, channel, i - 1,
+                                 min, max, offset,
+                                 &temp_bo);
+
+            offset_max = temp_bo.max;
+
+            codebook_bits(ctx, channel, i - 1, temp_bo.min - 1,
                           min, max, &temp_bo, 0);
-            codebook_bits(ctx, channel, i - 1, offset,
+            codebook_bits(ctx, channel, i - 1, offset_max + 1,
                           min, max, &temp_bo, 1);
 
             if (temp_bo.bitcount < bo.bitcount) {
