@@ -122,11 +122,11 @@ typedef struct {
     uint8_t         mlp_channels3;  /**< TODO unknown channel-related field
                                      *   These values are correct for mono and stereo. */
 
-    ChannelParams   channel_params[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_CHANNELS];
+    ChannelParams   channel_params[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_CHANNELS];
 
-    int             params_changed[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];
+    int             params_changed[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];
 
-    DecodingParams  decoding_params[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];
+    DecodingParams  decoding_params[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];
     RestartHeader   restart_header [MAX_SUBSTREAMS];
 
     ChannelParams   restart_channel_params[MAX_CHANNELS];
@@ -144,6 +144,7 @@ typedef struct {
     unsigned int    starting_frame_index;
     unsigned int    number_of_frames;
     unsigned int    number_of_samples;
+    unsigned int    seq_index;              ///< Sequence index for high compression levels.
 
     ChannelParams  *prev_channel_params;
     DecodingParams *prev_decoding_params;
@@ -316,13 +317,13 @@ static void copy_restart_frame_params(MLPEncodeContext *ctx,
     unsigned int index;
 
     for (index = 0; index < ctx->number_of_frames; index++) {
-        DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][index][0][substr];
+        DecodingParams *dp = &ctx->decoding_params[ctx->seq_index][ctx->frame_index][index][0][substr];
         unsigned int channel;
 
         copy_matrix_params(&dp->matrix_params, &ctx->cur_decoding_params->matrix_params);
 
         for (channel = 0; channel < MAX_CHANNELS; channel++) {
-            ChannelParams *cp = &ctx->channel_params[ctx->frame_index][index][0][channel];
+            ChannelParams *cp = &ctx->channel_params[ctx->seq_index][ctx->frame_index][index][0][channel];
             unsigned int filter;
 
             dp->quant_step_size[channel] = ctx->cur_decoding_params->quant_step_size[channel];
@@ -437,7 +438,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     unsigned int lossless_check_data_size;
     unsigned int lpc_sample_buffer_size;
     unsigned int frame_size_size;
-    unsigned int substr, index, index2, subblock;
+    unsigned int substr, index, index2, index3, subblock;
 
     ctx->avctx = avctx;
 
@@ -542,12 +543,14 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     clear_channel_params(ctx->restart_channel_params);
     clear_decoding_params(ctx->restart_decoding_params);
 
+    for (index3 = 0; index3 < MAJOR_HEADER_INTERVAL; index3++) {
     for (index2 = 0; index2 < MAJOR_HEADER_INTERVAL; index2++) {
     for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
         for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++) {
-            default_decoding_params(ctx, ctx->decoding_params[index2][index][subblock]);
-            clear_channel_params(ctx->channel_params[index2][index][subblock]);
+            default_decoding_params(ctx, ctx->decoding_params[index3][index2][index][subblock]);
+            clear_channel_params(ctx->channel_params[index3][index2][index][subblock]);
         }
+    }
     }
     }
 
@@ -1712,9 +1715,9 @@ static void rematrix_channels(MLPEncodeContext *ctx)
  */
 static void set_major_params(MLPEncodeContext *ctx)
 {
-    memcpy(ctx->major_channel_params, ctx->channel_params[0], sizeof(ctx->major_channel_params));
-    memcpy(ctx->major_decoding_params, ctx->decoding_params[0], sizeof(ctx->major_decoding_params));
-    memcpy(ctx->major_params_changed, ctx->params_changed[0], sizeof(ctx->major_params_changed));
+    memcpy(ctx->major_channel_params, ctx->channel_params[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1], sizeof(ctx->major_channel_params));
+    memcpy(ctx->major_decoding_params, ctx->decoding_params[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1], sizeof(ctx->major_decoding_params));
+    memcpy(ctx->major_params_changed, ctx->params_changed[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1], sizeof(ctx->major_params_changed));
 }
 
 static void analyze_sample_buffer(MLPEncodeContext *ctx)
@@ -1732,14 +1735,14 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
 
         for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
         for (index = 0; index < ctx->number_of_frames; index++) {
-            DecodingParams *dp = &ctx->decoding_params[ctx->frame_index][index][subblock][substr];
+            DecodingParams *dp = &ctx->decoding_params[ctx->seq_index][ctx->frame_index][index][subblock][substr];
             dp->blocksize = ctx->frame_size[index];
         }
-        ctx->decoding_params[ctx->frame_index][0][0][substr].blocksize = 8;
-        ctx->decoding_params[ctx->frame_index][0][1][substr].blocksize = ctx->frame_size[ctx->frame_index] - 8;
+        ctx->decoding_params[ctx->seq_index][ctx->frame_index][0][0][substr].blocksize = 8;
+        ctx->decoding_params[ctx->seq_index][ctx->frame_index][0][1][substr].blocksize = ctx->frame_size[ctx->frame_index] - 8;
 
-        ctx->cur_decoding_params = &ctx->decoding_params[ctx->frame_index][0][1][substr];
-        ctx->cur_channel_params = ctx->channel_params[ctx->frame_index][0][1];
+        ctx->cur_decoding_params = &ctx->decoding_params[ctx->seq_index][ctx->frame_index][0][1][substr];
+        ctx->cur_channel_params = ctx->channel_params[ctx->seq_index][ctx->frame_index][0][1];
 
         generate_2_noise_channels(ctx);
         lossless_matrix_coeffs   (ctx);
@@ -1752,13 +1755,13 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
 
         for (index = 0; index < ctx->number_of_frames; index++) {
             for (subblock = 0; subblock <= num_subblocks; subblock++) {
-                ctx->cur_decoding_params = &ctx->decoding_params[ctx->frame_index][index][subblock][substr];
-                ctx->cur_channel_params = ctx->channel_params[ctx->frame_index][index][subblock];
+                ctx->cur_decoding_params = &ctx->decoding_params[ctx->seq_index][ctx->frame_index][index][subblock][substr];
+                ctx->cur_channel_params = ctx->channel_params[ctx->seq_index][ctx->frame_index][index][subblock];
                 determine_bits(ctx);
                 ctx->sample_buffer += ctx->cur_decoding_params->blocksize * ctx->num_channels;
                 if (subblock)
                     num_subblocks = 0;
-                ctx->params_changed[ctx->frame_index][index][subblock][substr] = compare_decoding_params(ctx);
+                ctx->params_changed[ctx->seq_index][ctx->frame_index][index][subblock][substr] = compare_decoding_params(ctx);
                 ctx->prev_decoding_params = ctx->cur_decoding_params;
                 ctx->prev_channel_params = ctx->cur_channel_params;
             }
@@ -1860,33 +1863,41 @@ input_and_return:
         ctx->last_frame = ctx->inout_buffer;
     }
 
-    ctx->frame_index = (avctx->frame_number + 1) % ctx->major_header_interval;
-    restart_frame = !ctx->frame_index;
+    {
+    unsigned int seq_index;
 
-    if (restart_frame) {
+    for (seq_index = 0; seq_index <= ctx->frame_index; seq_index++) {
+        unsigned int number_of_samples = 0;
         unsigned int index, subblock;
 
         ctx->sample_buffer = ctx->major_scratch_buffer;
-
         ctx->inout_buffer = ctx->major_inout_buffer;
+        ctx->seq_index = seq_index;
 
+        ctx->starting_frame_index = ctx->frame_index - seq_index;
+        ctx->number_of_frames = seq_index + 1;
+
+        for (index = 0; index < ctx->number_of_frames; index++) {
+            number_of_samples += ctx->frame_size[ctx->starting_frame_index + index];
+        }
+        ctx->number_of_samples = number_of_samples;
+
+        for (index = 0; index < ctx->number_of_frames; index++)
+            for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
+                clear_channel_params(ctx->channel_params[ctx->seq_index][ctx->frame_index][index][subblock]);
+
+        input_to_sample_buffer(ctx);
+
+        analyze_sample_buffer(ctx);
+    }
+
+    if (ctx->frame_index == (ctx->major_header_interval - 1)) {
         ctx->major_frame_size = ctx->next_major_frame_size;
         ctx->next_major_frame_size = 0;
 
         if (!ctx->major_frame_size)
             goto no_data_left;
-
-        ctx->starting_frame_index = 0;
-        ctx->number_of_frames = MAJOR_HEADER_INTERVAL;
-        ctx->number_of_samples = ctx->major_frame_size;
-
-        for (index = 0; index < ctx->number_of_frames; index++)
-            for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
-                clear_channel_params(ctx->channel_params[ctx->frame_index][index][subblock]);
-
-        input_to_sample_buffer(ctx);
-
-        analyze_sample_buffer(ctx);
+    }
     }
 
 no_data_left:
