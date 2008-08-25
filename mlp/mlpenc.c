@@ -1479,10 +1479,9 @@ static inline void codebook_bits_offset(MLPEncodeContext *ctx,
  */
 static inline void codebook_bits(MLPEncodeContext *ctx,
                                  unsigned int channel, int codebook,
-                                 int average, int32_t min, int32_t max,
+                                 int offset, int32_t min, int32_t max,
                                  BestOffset *bo, int direction)
 {
-    int offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
     int previous_count = INT_MAX;
     int offset_min, offset_max;
     int is_greater = 0;
@@ -1534,6 +1533,7 @@ static void determine_bits(MLPEncodeContext *ctx)
         int32_t min = INT32_MAX, max = INT32_MIN;
         int best_codebook = 0;
         int average = 0;
+        int offset;
         BestOffset bo;
         int i;
 
@@ -1551,12 +1551,14 @@ static void determine_bits(MLPEncodeContext *ctx)
 
         no_codebook_bits(ctx, channel, min, max, &bo);
 
+        offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
+
         for (i = 1; i < 4; i++) {
             BestOffset temp_bo = { 0, INT_MAX, 0, 0, 0, };
 
-            codebook_bits(ctx, channel, i - 1, average,
+            codebook_bits(ctx, channel, i - 1, offset,
                           min, max, &temp_bo, 0);
-            codebook_bits(ctx, channel, i - 1, average,
+            codebook_bits(ctx, channel, i - 1, offset,
                           min, max, &temp_bo, 1);
 
             if (temp_bo.bitcount < bo.bitcount) {
