@@ -149,6 +149,8 @@ typedef struct {
     ChannelParams  *prev_channel_params;
     DecodingParams *prev_decoding_params;
 
+    unsigned int    max_codebook_search;
+
     DSPContext      dsp;
 } MLPEncodeContext;
 
@@ -475,6 +477,13 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
                                 * ctx->num_channels;
     /* TODO Let user pass major header interval as parameter. */
     ctx->major_header_interval = MAJOR_HEADER_INTERVAL;
+
+    if (avctx->compression_level == -1) {
+        ctx->max_codebook_search = 3;
+    } else {
+        /* TODO Decide how much to test with the compression_level the user wants. */
+        ctx->max_codebook_search = 3 * avctx->compression_level;
+    }
 
     /* TODO Let user pass parameters for LPC filter. */
 
@@ -1501,7 +1510,7 @@ static inline void codebook_bits(MLPEncodeContext *ctx,
                 *bo = temp_bo;
 
             is_greater = 0;
-        } else if (++is_greater >= 3)
+        } else if (++is_greater >= ctx->max_codebook_search)
             break;
 
         previous_count = temp_bo.bitcount;
