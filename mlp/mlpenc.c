@@ -150,6 +150,7 @@ typedef struct {
     DecodingParams *prev_decoding_params;
 
     unsigned int    max_codebook_search;
+    unsigned int    major_header_subinterval;
 
     DSPContext      dsp;
 } MLPEncodeContext;
@@ -480,9 +481,13 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 
     if (avctx->compression_level == -1) {
         ctx->max_codebook_search = 3;
+        ctx->major_header_subinterval = MAJOR_HEADER_INTERVAL;
     } else {
         /* TODO Decide how much to test with the compression_level the user wants. */
         ctx->max_codebook_search = 3 * avctx->compression_level;
+        ctx->major_header_subinterval = MAJOR_HEADER_INTERVAL >> avctx->compression_level;
+        if (!ctx->major_header_subinterval)
+            ctx->major_header_subinterval = 1;
     }
 
     /* TODO Let user pass parameters for LPC filter. */
@@ -1882,10 +1887,14 @@ input_and_return:
         ctx->last_frame = ctx->inout_buffer;
     }
 
-    {
-    unsigned int seq_index;
+    restart_frame = (ctx->frame_index + 1) % ctx->major_header_subinterval;
 
-    for (seq_index = 0; seq_index <= ctx->frame_index; seq_index++) {
+    if (!restart_frame) {
+    int seq_index;
+
+    for (seq_index  = ctx->frame_index;
+         seq_index  > 0;
+         seq_index -= ctx->major_header_subinterval) {
         unsigned int number_of_samples = 0;
         unsigned int index, subblock;
 
