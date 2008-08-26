@@ -135,6 +135,8 @@ typedef struct {
 
     ChannelParams   channel_params[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_CHANNELS];
 
+    BestOffset      best_offset[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_CHANNELS][NUM_CODEBOOKS];
+
     DecodingParams  decoding_params[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];
     RestartHeader   restart_header [MAX_SUBSTREAMS];
 
@@ -145,6 +147,7 @@ typedef struct {
     DecodingParams  major_decoding_params[MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];    ///< DecodingParams to be written to bitstream.
     int             major_params_changed[MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];     ///< params_changed to be written to bitstream.
 
+    BestOffset    (*cur_best_offset)[NUM_CODEBOOKS];
     ChannelParams  *cur_channel_params;
     DecodingParams *cur_decoding_params;
     RestartHeader  *cur_restart_header;
@@ -283,6 +286,13 @@ static int compare_decoding_params(MLPEncodeContext *ctx)
     }
 
     return retval;
+}
+
+static void copy_codebook_params(ChannelParams *dst, ChannelParams *src)
+{
+    dst->huff_offset = src->huff_offset;
+    dst->huff_lsbs   = src->huff_lsbs;
+    dst->codebook    = src->codebook;
 }
 
 static void copy_filter_params(FilterParams *dst, FilterParams *src)
@@ -1543,12 +1553,9 @@ static void determine_bits(MLPEncodeContext *ctx)
 
     for (channel = 0; channel <= rh->max_channel; channel++) {
         int32_t *sample_buffer = ctx->sample_buffer + channel;
-        ChannelParams *cp = &ctx->cur_channel_params[channel];
         int32_t min = INT32_MAX, max = INT32_MIN;
-        int best_codebook = 0;
         int average = 0;
         int offset;
-        BestOffset bo;
         int i;
 
         /* Determine extremes and average. */
@@ -1563,7 +1570,7 @@ static void determine_bits(MLPEncodeContext *ctx)
         }
         average /= dp->blocksize;
 
-        no_codebook_bits(ctx, channel, min, max, &bo);
+        no_codebook_bits(ctx, channel, min, max, &ctx->cur_best_offset[channel][0]);
 
         offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
 
@@ -1582,16 +1589,8 @@ static void determine_bits(MLPEncodeContext *ctx)
             codebook_bits(ctx, channel, i - 1, offset_max + 1,
                           min, max, &temp_bo, 1);
 
-            if (temp_bo.bitcount < bo.bitcount) {
-                bo = temp_bo;
-                best_codebook = i;
-            }
+            ctx->cur_best_offset[channel][i] = temp_bo;
         }
-
-        /* Update context. */
-        cp->huff_offset = bo.offset;
-        cp->huff_lsbs   = bo.lsb_bits + dp->quant_step_size[channel];
-        cp->codebook    = best_codebook;
     }
 }
 
@@ -1733,6 +1732,34 @@ static void rematrix_channels(MLPEncodeContext *ctx)
  **** Functions that deal with determining the best parameters and output ***
  ****************************************************************************/
 
+static void set_best_offset(MLPEncodeContext *ctx, int index, int subblock)
+{
+    DecodingParams *dp = ctx->cur_decoding_params;
+    RestartHeader *rh = ctx->cur_restart_header;
+    unsigned int channel;
+
+    for (channel = rh->min_channel; channel <= rh->max_channel; channel++) {
+        ChannelParams *major_cp = &ctx->major_channel_params[index][subblock][channel];
+        ChannelParams *cp = &ctx->cur_channel_params[channel];
+        BestOffset bo = { 0, INT_MAX, 0, 0, 0, };
+        unsigned int best_codebook = 0, i;
+
+        for (i = 0; i < NUM_CODEBOOKS; i++) {
+            if (ctx->cur_best_offset[channel][i].bitcount < bo.bitcount) {
+                bo = ctx->cur_best_offset[channel][i];
+                best_codebook = i;
+            }
+        }
+
+        /* Update context. */
+        cp->huff_offset = bo.offset;
+        cp->huff_lsbs   = bo.lsb_bits + dp->quant_step_size[channel];
+        cp->codebook    = best_codebook;
+
+        copy_codebook_params(major_cp, cp);
+    }
+}
+
 /** Analyzes all collected bitcounts and selects the best parameters for each
  *  individual access unit.
  *  TODO This is just a stub!
@@ -1757,9 +1784,12 @@ static void set_major_params(MLPEncodeContext *ctx)
             for (subblock = 0; subblock <= num_subblocks; subblock++) {
                 ctx->cur_decoding_params = &ctx->decoding_params[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1][index][subblock][substr];
                 ctx->cur_channel_params = ctx->channel_params[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1][index][subblock];
+                ctx->cur_best_offset = ctx->best_offset[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1][index][subblock];
 
                 if (subblock)
                     num_subblocks = 0;
+
+                set_best_offset(ctx, index, subblock);
 
                 ctx->major_params_changed[index][subblock][substr] = compare_decoding_params(ctx);
 
@@ -1804,6 +1834,7 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
             for (subblock = 0; subblock <= num_subblocks; subblock++) {
                 ctx->cur_decoding_params = &ctx->decoding_params[ctx->seq_index][ctx->frame_index][index][subblock][substr];
                 ctx->cur_channel_params = ctx->channel_params[ctx->seq_index][ctx->frame_index][index][subblock];
+                ctx->cur_best_offset = ctx->best_offset[ctx->seq_index][ctx->frame_index][index][subblock];
                 determine_bits(ctx);
                 ctx->sample_buffer += ctx->cur_decoding_params->blocksize * ctx->num_channels;
                 if (subblock)
