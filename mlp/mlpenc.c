@@ -132,8 +132,6 @@ typedef struct {
 
     ChannelParams   channel_params[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_CHANNELS];
 
-    int             params_changed[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];
-
     DecodingParams  decoding_params[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];
     RestartHeader   restart_header [MAX_SUBSTREAMS];
 
@@ -1729,9 +1727,35 @@ static void rematrix_channels(MLPEncodeContext *ctx)
  */
 static void set_major_params(MLPEncodeContext *ctx)
 {
+    unsigned int index, subblock;
+    unsigned int substr;
+
     memcpy(ctx->major_channel_params, ctx->channel_params[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1], sizeof(ctx->major_channel_params));
     memcpy(ctx->major_decoding_params, ctx->decoding_params[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1], sizeof(ctx->major_decoding_params));
-    memcpy(ctx->major_params_changed, ctx->params_changed[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1], sizeof(ctx->major_params_changed));
+
+    for (substr = 0; substr < ctx->num_substreams; substr++) {
+        unsigned int num_subblocks = 1;
+
+        ctx->cur_restart_header = &ctx->restart_header[substr];
+
+        ctx->prev_decoding_params = &ctx->restart_decoding_params[substr];
+        ctx->prev_channel_params = ctx->restart_channel_params;
+
+        for (index = 0; index < ctx->number_of_frames; index++) {
+            for (subblock = 0; subblock <= num_subblocks; subblock++) {
+                ctx->cur_decoding_params = &ctx->decoding_params[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1][index][subblock][substr];
+                ctx->cur_channel_params = ctx->channel_params[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1][index][subblock];
+
+                if (subblock)
+                    num_subblocks = 0;
+
+                ctx->major_params_changed[index][subblock][substr] = compare_decoding_params(ctx);
+
+                ctx->prev_decoding_params = ctx->cur_decoding_params;
+                ctx->prev_channel_params = ctx->cur_channel_params;
+            }
+        }
+    }
 }
 
 static void analyze_sample_buffer(MLPEncodeContext *ctx)
@@ -1743,9 +1767,6 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
         unsigned int num_subblocks = 1;
 
         ctx->cur_restart_header = &ctx->restart_header[substr];
-
-        ctx->prev_decoding_params = &ctx->restart_decoding_params[substr];
-        ctx->prev_channel_params = ctx->restart_channel_params;
 
         for (subblock = 0; subblock < MAX_SUBBLOCKS; subblock++)
         for (index = 0; index < ctx->number_of_frames; index++) {
@@ -1775,9 +1796,6 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
                 ctx->sample_buffer += ctx->cur_decoding_params->blocksize * ctx->num_channels;
                 if (subblock)
                     num_subblocks = 0;
-                ctx->params_changed[ctx->seq_index][ctx->frame_index][index][subblock][substr] = compare_decoding_params(ctx);
-                ctx->prev_decoding_params = ctx->cur_decoding_params;
-                ctx->prev_channel_params = ctx->cur_channel_params;
             }
         }
     }
