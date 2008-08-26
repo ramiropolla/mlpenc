@@ -1383,7 +1383,6 @@ static void no_codebook_bits(MLPEncodeContext *ctx,
                              int32_t min, int32_t max,
                              BestOffset *bo)
 {
-    ChannelParams *prev_cp = &ctx->prev_channel_params[channel];
     DecodingParams *dp = ctx->cur_decoding_params;
     int16_t offset;
     int32_t unsign;
@@ -1408,20 +1407,11 @@ static void no_codebook_bits(MLPEncodeContext *ctx,
      * adjusted because of sign_shift. */
     offset = min + diff / 2 + !!lsb_bits;
 
-    /* Check if we can use the same offset as last access_unit to save
-     * on writing a new header. */
-    if (lsb_bits + dp->quant_step_size[channel] == prev_cp->huff_lsbs) {
-        int16_t cur_offset = prev_cp->huff_offset;
-        int32_t cur_max    = cur_offset + unsign - 1;
-        int32_t cur_min    = cur_offset - unsign;
-
-        if (min > cur_min && max < cur_max)
-            offset = cur_offset;
-    }
-
     bo->offset   = offset;
     bo->lsb_bits = lsb_bits;
     bo->bitcount = lsb_bits * dp->blocksize;
+    bo->min      = max - unsign + 1;
+    bo->max      = min + unsign;
 }
 
 /** Determines the least amount of bits needed to encode the samples using a
