@@ -140,9 +140,6 @@ typedef struct {
     DecodingParams  decoding_params[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];
     RestartHeader   restart_header [MAX_SUBSTREAMS];
 
-    ChannelParams   restart_channel_params[MAX_CHANNELS];
-    DecodingParams  restart_decoding_params[MAX_SUBSTREAMS];
-
     ChannelParams   major_channel_params[MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_CHANNELS];       ///< ChannelParams to be written to bitstream.
     DecodingParams  major_decoding_params[MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];    ///< DecodingParams to be written to bitstream.
     int             major_params_changed[MAJOR_HEADER_INTERVAL][MAX_SUBBLOCKS][MAX_SUBSTREAMS];     ///< params_changed to be written to bitstream.
@@ -166,6 +163,9 @@ typedef struct {
 
     DSPContext      dsp;
 } MLPEncodeContext;
+
+static ChannelParams   restart_channel_params[MAX_CHANNELS];
+static DecodingParams  restart_decoding_params[MAX_SUBSTREAMS];
 
 #define SYNC_MAJOR      0xf8726f
 
@@ -582,8 +582,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         rh->max_matrix_channel = 1;
     }
 
-    clear_channel_params(ctx->restart_channel_params);
-    clear_decoding_params(ctx->restart_decoding_params);
+    clear_channel_params(restart_channel_params);
+    clear_decoding_params(restart_decoding_params);
 
     for (index3 = 0; index3 < MAJOR_HEADER_INTERVAL; index3++) {
     for (index2 = 0; index2 < MAJOR_HEADER_INTERVAL; index2++) {
@@ -1777,8 +1777,8 @@ static void set_major_params(MLPEncodeContext *ctx)
 
         ctx->cur_restart_header = &ctx->restart_header[substr];
 
-        ctx->prev_decoding_params = &ctx->restart_decoding_params[substr];
-        ctx->prev_channel_params = ctx->restart_channel_params;
+        ctx->prev_decoding_params = &restart_decoding_params[substr];
+        ctx->prev_channel_params = restart_channel_params;
 
         for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
             for (subblock = 0; subblock <= num_subblocks; subblock++) {
