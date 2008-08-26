@@ -76,6 +76,14 @@ typedef struct {
 
 } DecodingParams;
 
+typedef struct BestOffset {
+    int16_t offset;
+    int bitcount;
+    int lsb_bits;
+    int16_t min;
+    int16_t max;
+} BestOffset;
+
 #define HUFF_OFFSET_MIN    -16384
 #define HUFF_OFFSET_MAX     16383
 
@@ -1366,14 +1374,6 @@ static void lossless_matrix_coeffs(MLPEncodeContext *ctx)
 static int codebook_extremes[3][2] = {
     {-9, 8}, {-8, 7}, {-15, 14},
 };
-
-typedef struct BestOffset {
-    int16_t offset;
-    int bitcount;
-    int lsb_bits;
-    int16_t min;
-    int16_t max;
-} BestOffset;
 
 /** Determines the least amount of bits needed to encode the samples using no
  *  codebooks.
