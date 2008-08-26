@@ -90,6 +90,9 @@ typedef struct BestOffset {
 /** Maximum number of subblocks this implementation of the encoder uses. */
 #define MAX_SUBBLOCKS       2
 
+/** Number of possible codebooks (counting "no codebooks") */
+#define NUM_CODEBOOKS       4
+
 typedef struct {
     AVCodecContext *avctx;
 
@@ -1564,7 +1567,7 @@ static void determine_bits(MLPEncodeContext *ctx)
 
         offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
 
-        for (i = 1; i < 4; i++) {
+        for (i = 1; i < NUM_CODEBOOKS; i++) {
             BestOffset temp_bo = { 0, INT_MAX, 0, 0, 0, };
             int16_t offset_max;
 
