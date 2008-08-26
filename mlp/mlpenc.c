@@ -1741,7 +1741,7 @@ static void set_major_params(MLPEncodeContext *ctx)
         ctx->prev_decoding_params = &ctx->restart_decoding_params[substr];
         ctx->prev_channel_params = ctx->restart_channel_params;
 
-        for (index = 0; index < ctx->number_of_frames; index++) {
+        for (index = 0; index < MAJOR_HEADER_INTERVAL; index++) {
             for (subblock = 0; subblock <= num_subblocks; subblock++) {
                 ctx->cur_decoding_params = &ctx->decoding_params[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1][index][subblock][substr];
                 ctx->cur_channel_params = ctx->channel_params[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1][index][subblock];
