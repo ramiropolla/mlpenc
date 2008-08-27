@@ -1521,7 +1521,9 @@ static void no_codebook_bits_offset(MLPEncodeContext *ctx,
     min -= offset;
     max -= offset;
 
-    lsb_bits = FFMAX(number_sbits(min), number_sbits(max));
+    lsb_bits = FFMAX(number_sbits(min), number_sbits(max)) - 1;
+
+    lsb_bits += !!lsb_bits;
 
     unsign = 1 << (lsb_bits - 1);
 
