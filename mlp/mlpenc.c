@@ -1506,6 +1506,32 @@ static int codebook_extremes[3][2] = {
     {-9, 8}, {-8, 7}, {-15, 14},
 };
 
+/** Determines the amount of bits needed to encode the samples using no
+ *  codebooks and a specified offset.
+ */
+static void no_codebook_bits_offset(MLPEncodeContext *ctx,
+                                    unsigned int channel, int16_t offset,
+                                    int32_t min, int32_t max,
+                                    BestOffset *bo)
+{
+    DecodingParams *dp = ctx->cur_decoding_params;
+    int32_t unsign;
+    int lsb_bits;
+
+    min -= offset;
+    max -= offset;
+
+    lsb_bits = FFMAX(number_sbits(min), number_sbits(max));
+
+    unsign = 1 << (lsb_bits - 1);
+
+    bo->offset   = offset;
+    bo->lsb_bits = lsb_bits;
+    bo->bitcount = lsb_bits * dp->blocksize;
+    bo->min      = offset - unsign + 1;
+    bo->max      = offset + unsign;
+}
+
 /** Determines the least amount of bits needed to encode the samples using no
  *  codebooks.
  */
@@ -1682,7 +1708,10 @@ static void determine_bits(MLPEncodeContext *ctx)
         }
         average /= dp->blocksize;
 
+        if (!cp->filter_params[FIR].order)
         no_codebook_bits(ctx, channel, min, max, &ctx->cur_best_offset[channel][0]);
+        else
+            no_codebook_bits_offset(ctx, channel, offset, min, max, &ctx->cur_best_offset[channel][0]);
 
         if (!cp->filter_params[FIR].order)
         offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
