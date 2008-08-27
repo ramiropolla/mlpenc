@@ -1547,10 +1547,11 @@ static void determine_bits(MLPEncodeContext *ctx)
     unsigned int channel;
 
     for (channel = 0; channel <= rh->max_channel; channel++) {
+        ChannelParams *cp = &ctx->cur_channel_params[channel];
         int32_t *sample_buffer = ctx->sample_buffer + channel;
         int32_t min = INT32_MAX, max = INT32_MIN;
         int average = 0;
-        int offset;
+        int offset = 0;
         int i;
 
         /* Determine extremes and average. */
@@ -1567,6 +1568,7 @@ static void determine_bits(MLPEncodeContext *ctx)
 
         no_codebook_bits(ctx, channel, min, max, &ctx->cur_best_offset[channel][0]);
 
+        if (!cp->filter_params[FIR].order)
         offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
 
         for (i = 1; i < NUM_CODEBOOKS; i++) {
@@ -1577,12 +1579,14 @@ static void determine_bits(MLPEncodeContext *ctx)
                                  min, max, offset,
                                  &temp_bo);
 
+            if (!cp->filter_params[FIR].order) {
             offset_max = temp_bo.max;
 
             codebook_bits(ctx, channel, i - 1, temp_bo.min - 1,
                           min, max, &temp_bo, 0);
             codebook_bits(ctx, channel, i - 1, offset_max + 1,
                           min, max, &temp_bo, 1);
+            }
 
             ctx->cur_best_offset[channel][i] = temp_bo;
         }
