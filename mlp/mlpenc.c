@@ -597,6 +597,122 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 }
 
 /****************************************************************************
+ ********************** Functions that do bitcounting ***********************
+ ****************************************************************************/
+
+static unsigned int bitcount_restart_header(MLPEncodeContext *ctx)
+{
+    RestartHeader *rh = ctx->cur_restart_header;
+    return 121 + (rh->max_matrix_channel + 1) * 6;
+}
+
+static unsigned int bitcount_filter_params(MLPEncodeContext *ctx,
+                                           unsigned int channel, unsigned int filter)
+{
+    FilterParams *fp = &ctx->cur_channel_params[channel].filter_params[filter];
+    unsigned int bitcount = 4;
+
+    if (fp->order > 0) {
+        bitcount += 12;
+        bitcount += fp->coeff_bits * fp->order;
+        bitcount++;
+    }
+
+    return bitcount;
+}
+
+static unsigned int bitcount_matrix_params(MLPEncodeContext *ctx)
+{
+    DecodingParams *dp = ctx->cur_decoding_params;
+    MatrixParams *mp = &dp->matrix_params;
+    unsigned int bitcount = 4;
+    unsigned int mat;
+
+    for (mat = 0; mat < mp->count; mat++) {
+        unsigned int channel;
+
+        bitcount += 9;
+
+        for (channel = 0; channel < ctx->num_channels; channel++) {
+            bitcount++;
+
+            if (mp->coeff[mat][channel])
+                bitcount += mp->fbits[mat] + 2;
+        }
+    }
+
+    return bitcount;
+}
+
+static unsigned int bitcount_decoding_params(MLPEncodeContext *ctx,
+                                             int params_changed)
+{
+    DecodingParams *dp = ctx->cur_decoding_params;
+    RestartHeader  *rh = ctx->cur_restart_header;
+    unsigned int bitcount = 0;
+    unsigned int ch;
+
+    bitcount++;
+    if (dp->param_presence_flags != PARAMS_DEFAULT &&
+        params_changed & PARAM_PRESENCE_FLAGS) {
+        bitcount += 8;
+    }
+
+    if (dp->param_presence_flags & PARAM_BLOCKSIZE) {
+        bitcount++;
+        if (params_changed       & PARAM_BLOCKSIZE)
+            bitcount += 9;
+    }
+
+    if (dp->param_presence_flags & PARAM_MATRIX) {
+        bitcount++;
+        if (params_changed       & PARAM_MATRIX)
+            bitcount += bitcount_matrix_params(ctx);
+    }
+
+    if (dp->param_presence_flags & PARAM_OUTSHIFT) {
+        bitcount++;
+        if (params_changed       & PARAM_OUTSHIFT)
+            bitcount += (rh->max_matrix_channel + 1) * 4;
+    }
+
+    if (dp->param_presence_flags & PARAM_QUANTSTEP) {
+        bitcount++;
+        if (params_changed       & PARAM_QUANTSTEP)
+            bitcount += (rh->max_channel        + 1) * 4;
+    }
+
+    for (ch = rh->min_channel; ch <= rh->max_channel; ch++) {
+
+        bitcount++;
+        if (dp->param_presence_flags & 0xF) {
+
+            if (dp->param_presence_flags & PARAM_FIR) {
+                bitcount++;
+                if (params_changed       & PARAM_FIR)
+                    bitcount += bitcount_filter_params(ctx, ch, FIR);
+            }
+
+            if (dp->param_presence_flags & PARAM_IIR) {
+                bitcount++;
+                if (params_changed       & PARAM_IIR)
+                    bitcount += bitcount_filter_params(ctx, ch, IIR);
+            }
+
+            if (dp->param_presence_flags & PARAM_HUFFOFFSET) {
+                bitcount++;
+                if (params_changed       & PARAM_HUFFOFFSET)
+                    bitcount += 15;
+            }
+
+            bitcount += 7;
+        }
+    }
+
+    return bitcount;
+}
+
+/****************************************************************************
  ****************** Functions that write to the bitstream *******************
  ****************************************************************************/
 
