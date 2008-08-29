@@ -22,6 +22,7 @@
 #include "avcodec.h"
 #include "bitstream.h"
 #include "libavutil/crc.h"
+#include "libavutil/avstring.h"
 #include "mlp.h"
 #include "dsputil.h"
 #include "lpc.h"
@@ -132,7 +133,7 @@ typedef struct {
 
     ChannelParams   channel_params[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL+1][MAX_CHANNELS];
 
-    BestOffset      best_offset[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL+1][MAX_CHANNELS][NUM_CODEBOOKS];
+    BestOffset      best_offset[MAJOR_HEADER_INTERVAL+1][MAX_CHANNELS][NUM_CODEBOOKS];
 
     DecodingParams  decoding_params[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL+1][MAX_SUBSTREAMS];
     RestartHeader   restart_header [MAX_SUBSTREAMS];
@@ -163,6 +164,7 @@ typedef struct {
 
 static ChannelParams   restart_channel_params[MAX_CHANNELS];
 static DecodingParams  restart_decoding_params[MAX_SUBSTREAMS];
+static BestOffset      restart_best_offset[NUM_CODEBOOKS] = {{0}};
 
 #define SYNC_MAJOR      0xf8726f
 
@@ -283,13 +285,6 @@ static int compare_decoding_params(MLPEncodeContext *ctx)
     }
 
     return retval;
-}
-
-static void copy_codebook_params(ChannelParams *dst, ChannelParams *src)
-{
-    dst->huff_offset = src->huff_offset;
-    dst->huff_lsbs   = src->huff_lsbs;
-    dst->codebook    = src->codebook;
 }
 
 static void copy_filter_params(FilterParams *dst, FilterParams *src)
@@ -1878,31 +1873,136 @@ static void rematrix_channels(MLPEncodeContext *ctx)
  **** Functions that deal with determining the best parameters and output ***
  ****************************************************************************/
 
-static void set_best_offset(MLPEncodeContext *ctx, int index)
+typedef struct {
+    char    path[MAJOR_HEADER_INTERVAL + 3];
+    int     bitcount;
+} PathCounter;
+
+static const char *path_counter_codebook[] = { "0", "1", "2", "3", };
+
+#define ZERO_PATH               '0'
+#define CODEBOOK_CHANGE_BITS    21
+
+static void clear_path_counter(PathCounter *path_counter)
+{
+    unsigned int i;
+
+    for (i = 0; i < NUM_CODEBOOKS + 1; i++) {
+        path_counter[i].path[0]  = ZERO_PATH;
+        path_counter[i].path[1]  =      0x00;
+        path_counter[i].bitcount =         0;
+    }
+}
+
+static int compare_best_offset(BestOffset *prev, BestOffset *cur)
+{
+    if (prev->lsb_bits != cur->lsb_bits)
+        return 1;
+
+    return 0;
+}
+
+static int best_codebook_path_cost(MLPEncodeContext *ctx, unsigned int channel,
+                                   PathCounter *src, int cur_codebook)
+{
+    BestOffset *cur_bo, *prev_bo = restart_best_offset;
+    int bitcount = src->bitcount;
+    char *path = src->path + 1;
+    int prev_codebook;
+    int i;
+
+    for (i = 0; path[i]; i++)
+        prev_bo = ctx->best_offset[i][channel];
+
+    prev_codebook = path[i - 1] - ZERO_PATH;
+
+    cur_bo = ctx->best_offset[i][channel];
+
+    bitcount += cur_bo[cur_codebook].bitcount;
+
+    if (prev_codebook != cur_codebook ||
+        compare_best_offset(&prev_bo[prev_codebook], &cur_bo[cur_codebook]))
+        bitcount += CODEBOOK_CHANGE_BITS;
+
+    return bitcount;
+}
+
+static void set_best_codebook(MLPEncodeContext *ctx)
 {
     DecodingParams *dp = ctx->cur_decoding_params;
     RestartHeader *rh = ctx->cur_restart_header;
     unsigned int channel;
 
     for (channel = rh->min_channel; channel <= rh->max_channel; channel++) {
-        ChannelParams *major_cp = &ctx->major_channel_params[index][channel];
-        ChannelParams *cp = &ctx->cur_channel_params[channel];
-        BestOffset bo = { 0, INT_MAX, 0, 0, 0, };
-        unsigned int best_codebook = 0, i;
+        BestOffset *cur_bo, *prev_bo = restart_best_offset;
+        PathCounter path_counter[NUM_CODEBOOKS + 1];
+        unsigned int best_codebook;
+        unsigned int index;
+        char *best_path;
 
-        for (i = 0; i < NUM_CODEBOOKS; i++) {
-            if (ctx->cur_best_offset[channel][i].bitcount < bo.bitcount) {
-                bo = ctx->cur_best_offset[channel][i];
-                best_codebook = i;
+        clear_path_counter(path_counter);
+
+        for (index = 0; index < ctx->number_of_frames + 1; index++) {
+            unsigned int best_bitcount = INT_MAX;
+            unsigned int codebook;
+
+            cur_bo = ctx->best_offset[index][channel];
+
+            for (codebook = 0; codebook < NUM_CODEBOOKS; codebook++) {
+                int prev_best_bitcount = INT_MAX;
+                int last_best;
+
+                for (last_best = 0; last_best < 2; last_best++) {
+                    PathCounter *dst_path = &path_counter[codebook];
+                    PathCounter *src_path;
+                    int  temp_bitcount;
+
+                    /* First test last path with same headers,
+                     * then with last best. */
+                    if (last_best) {
+                        src_path = &path_counter[NUM_CODEBOOKS];
+                    } else {
+                        if (compare_best_offset(&prev_bo[codebook], &cur_bo[codebook]))
+                            continue;
+                        else
+                            src_path = &path_counter[codebook];
+                    }
+
+                    temp_bitcount = best_codebook_path_cost(ctx, channel, src_path, codebook);
+
+                    if (temp_bitcount < best_bitcount) {
+                        best_bitcount = temp_bitcount;
+                        best_codebook = codebook;
+                    }
+
+                    if (temp_bitcount < prev_best_bitcount) {
+                        prev_best_bitcount = temp_bitcount;
+                        if (src_path != dst_path)
+                            memcpy(dst_path, src_path, sizeof(PathCounter));
+                        av_strlcat(dst_path->path, path_counter_codebook[codebook], sizeof(dst_path->path));
+                        dst_path->bitcount = temp_bitcount;
+                    }
+                }
             }
+
+            prev_bo = cur_bo;
+
+            memcpy(&path_counter[NUM_CODEBOOKS], &path_counter[best_codebook], sizeof(PathCounter));
         }
 
-        /* Update context. */
-        cp->huff_offset = bo.offset;
-        cp->huff_lsbs   = bo.lsb_bits + dp->quant_step_size[channel];
-        cp->codebook    = best_codebook;
+        best_path = path_counter[NUM_CODEBOOKS].path + 1;
 
-        copy_codebook_params(major_cp, cp);
+        /* Update context. */
+        for (index = 0; index < ctx->number_of_frames + 1; index++) {
+            ChannelParams *cp = &ctx->channel_params[ctx->seq_index][ctx->frame_index][index][channel];
+
+            best_codebook = *best_path++ - ZERO_PATH;
+            cur_bo = &ctx->best_offset[index][channel][best_codebook];
+
+            cp->huff_offset = cur_bo->offset;
+            cp->huff_lsbs   = cur_bo->lsb_bits + dp->quant_step_size[channel];
+            cp->codebook    = best_codebook;
+        }
     }
 }
 
@@ -1928,9 +2028,6 @@ static void set_major_params(MLPEncodeContext *ctx)
         for (index = 0; index < MAJOR_HEADER_INTERVAL + 1; index++) {
                 ctx->cur_decoding_params = &ctx->decoding_params[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1][index][substr];
                 ctx->cur_channel_params = ctx->channel_params[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1][index];
-                ctx->cur_best_offset = ctx->best_offset[MAJOR_HEADER_INTERVAL-1][MAJOR_HEADER_INTERVAL-1][index];
-
-                set_best_offset(ctx, index);
 
                 ctx->major_params_changed[index][substr] = compare_decoding_params(ctx);
 
@@ -1971,10 +2068,12 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
         for (index = 0; index < ctx->number_of_frames + 1; index++) {
                 ctx->cur_decoding_params = &ctx->decoding_params[ctx->seq_index][ctx->frame_index][index][substr];
                 ctx->cur_channel_params = ctx->channel_params[ctx->seq_index][ctx->frame_index][index];
-                ctx->cur_best_offset = ctx->best_offset[ctx->seq_index][ctx->frame_index][index];
+                ctx->cur_best_offset = ctx->best_offset[index];
                 determine_bits(ctx);
                 ctx->sample_buffer += ctx->cur_decoding_params->blocksize * ctx->num_channels;
         }
+
+        set_best_codebook(ctx);
     }
 }
 
