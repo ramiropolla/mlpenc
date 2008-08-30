@@ -2198,8 +2198,9 @@ input_and_return:
         }
         ctx->number_of_samples = number_of_samples;
 
-        for (index = 0; index < ctx->number_of_frames + 1; index++)
-                clear_channel_params(ctx->channel_params[ctx->seq_index][ctx->frame_index][index]);
+        for (index = 0; index < ctx->number_of_frames + 1; index++) {
+            clear_channel_params(ctx->channel_params[ctx->seq_index][ctx->frame_index][index]);
+        }
 
         input_to_sample_buffer(ctx);
 
