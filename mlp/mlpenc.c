@@ -359,11 +359,11 @@ static void copy_restart_frame_params(MLPEncodeContext *ctx,
 }
 
 /** Clears a DecodingParams struct the way it should be after a restart header. */
-static void clear_decoding_params(DecodingParams decoding_params[MAX_SUBSTREAMS])
+static void clear_decoding_params(MLPEncodeContext *ctx, DecodingParams decoding_params[MAX_SUBSTREAMS])
 {
     unsigned int substr;
 
-    for (substr = 0; substr < MAX_SUBSTREAMS; substr++) {
+    for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams *dp = &decoding_params[substr];
 
         dp->param_presence_flags   = 0xff;
@@ -397,9 +397,9 @@ static void default_decoding_params(MLPEncodeContext *ctx,
 {
     unsigned int substr;
 
-    clear_decoding_params(decoding_params);
+    clear_decoding_params(ctx, decoding_params);
 
-    for (substr = 0; substr < MAX_SUBSTREAMS; substr++) {
+    for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams *dp = &decoding_params[substr];
         uint8_t param_presence_flags = 0;
 
@@ -601,7 +601,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     }
 
     clear_channel_params(ctx, restart_channel_params);
-    clear_decoding_params(restart_decoding_params);
+    clear_decoding_params(ctx, restart_decoding_params);
 
     dsputil_init(&ctx->dsp, avctx);
 
