@@ -121,7 +121,7 @@ typedef struct {
 
     unsigned int    one_sample_buffer_size; ///< Number of samples*channel for one access unit.
 
-    unsigned int    max_restart_interval;  ///< Max interval of access units in between two major frames.
+    unsigned int    max_restart_interval;   ///< Max interval of access units in between two major frames.
     unsigned int    min_restart_interval;   ///< Min interval of access units in between two major frames.
 
     uint16_t        timestamp;              ///< Timestamp of current access unit.
@@ -1215,15 +1215,15 @@ static void input_to_sample_buffer(MLPEncodeContext *ctx)
 
     for (index = 0; index < ctx->number_of_frames; index++) {
         unsigned int cur_index = (ctx->starting_frame_index + index) % ctx->max_restart_interval;
-    int32_t *input_buffer = ctx->inout_buffer + cur_index * ctx->one_sample_buffer_size;
-    unsigned int i, channel;
+        int32_t *input_buffer = ctx->inout_buffer + cur_index * ctx->one_sample_buffer_size;
+        unsigned int i, channel;
 
-    for (i = 0; i < ctx->frame_size[cur_index]; i++) {
-        for (channel = 0; channel < ctx->avctx->channels; channel++)
-            *sample_buffer++ = *input_buffer++;
-        sample_buffer += 2; /* noise_channels */
-        input_buffer += 2; /* noise_channels */
-    }
+        for (i = 0; i < ctx->frame_size[cur_index]; i++) {
+            for (channel = 0; channel < ctx->avctx->channels; channel++)
+                *sample_buffer++ = *input_buffer++;
+            sample_buffer += 2; /* noise_channels */
+            input_buffer += 2; /* noise_channels */
+        }
     }
 }
 
