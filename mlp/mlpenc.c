@@ -29,7 +29,7 @@
 
 #define MAJOR_HEADER_INTERVAL 16
 
-#define MLP_MIN_LPC_ORDER      0
+#define MLP_MIN_LPC_ORDER      1
 #define MLP_MAX_LPC_ORDER      8
 #define MLP_MAX_LPC_SHIFT     16
 
