@@ -122,6 +122,7 @@ typedef struct {
     unsigned int    one_sample_buffer_size; ///< Number of samples*channel for one access unit.
 
     unsigned int    max_restart_interval;  ///< Max interval of access units in between two major frames.
+    unsigned int    min_restart_interval;   ///< Min interval of access units in between two major frames.
 
     uint16_t        timestamp;              ///< Timestamp of current access unit.
 
@@ -157,7 +158,6 @@ typedef struct {
     DecodingParams *prev_decoding_params;
 
     unsigned int    max_codebook_search;
-    unsigned int    major_header_subinterval;
 
     DSPContext      dsp;
 } MLPEncodeContext;
@@ -501,13 +501,13 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 
     if (avctx->compression_level == -1) {
         ctx->max_codebook_search = 3;
-        ctx->major_header_subinterval = MAJOR_HEADER_INTERVAL;
+        ctx->min_restart_interval = MAJOR_HEADER_INTERVAL;
     } else {
         /* TODO Decide how much to test with the compression_level the user wants. */
         ctx->max_codebook_search = 3 * avctx->compression_level;
-        ctx->major_header_subinterval = MAJOR_HEADER_INTERVAL >> avctx->compression_level;
-        if (!ctx->major_header_subinterval)
-            ctx->major_header_subinterval = 1;
+        ctx->min_restart_interval = MAJOR_HEADER_INTERVAL >> avctx->compression_level;
+        if (!ctx->min_restart_interval)
+            ctx->min_restart_interval = 1;
     }
 
     /* TODO Let user pass parameters for LPC filter. */
@@ -2143,11 +2143,11 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     if (restart_frame) {
         set_major_params(ctx);
-        if (ctx->major_header_subinterval != ctx->max_restart_interval)
+        if (ctx->min_restart_interval != ctx->max_restart_interval)
         process_major_frame(ctx);
     }
 
-    if (ctx->major_header_subinterval == ctx->max_restart_interval)
+    if (ctx->min_restart_interval == ctx->max_restart_interval)
         ctx->write_buffer = ctx->sample_buffer;
 
     avctx->coded_frame->key_frame = restart_frame;
@@ -2166,14 +2166,14 @@ input_and_return:
         ctx->last_frame = ctx->inout_buffer;
     }
 
-    restart_frame = (ctx->frame_index + 1) % ctx->major_header_subinterval;
+    restart_frame = (ctx->frame_index + 1) % ctx->min_restart_interval;
 
     if (!restart_frame) {
     int seq_index;
 
     for (seq_index  = ctx->frame_index;
          seq_index  > 0;
-         seq_index -= ctx->major_header_subinterval) {
+         seq_index -= ctx->min_restart_interval) {
         unsigned int number_of_samples = 0;
         unsigned int index;
 
