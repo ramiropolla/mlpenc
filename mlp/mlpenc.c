@@ -2190,7 +2190,7 @@ input_and_return:
         ctx->number_of_frames = seq_index + 1;
 
         for (index = 0; index < ctx->number_of_frames; index++) {
-            number_of_samples += ctx->frame_size[ctx->starting_frame_index + index];
+            number_of_samples += ctx->frame_size[(ctx->starting_frame_index + index) % ctx->max_restart_interval];
         }
         ctx->number_of_samples = number_of_samples;
 
