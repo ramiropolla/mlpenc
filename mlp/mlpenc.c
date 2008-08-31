@@ -121,7 +121,7 @@ typedef struct {
 
     unsigned int    one_sample_buffer_size; ///< Number of samples*channel for one access unit.
 
-    unsigned int    major_header_interval;  ///< Interval of access units in between two major frames.
+    unsigned int    max_restart_interval;  ///< Max interval of access units in between two major frames.
 
     uint16_t        timestamp;              ///< Timestamp of current access unit.
 
@@ -497,7 +497,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     ctx->one_sample_buffer_size = avctx->frame_size
                                 * ctx->num_channels;
     /* TODO Let user pass major header interval as parameter. */
-    ctx->major_header_interval = MAJOR_HEADER_INTERVAL;
+    ctx->max_restart_interval = MAJOR_HEADER_INTERVAL;
 
     if (avctx->compression_level == -1) {
         ctx->max_codebook_search = 3;
@@ -513,7 +513,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     /* TODO Let user pass parameters for LPC filter. */
 
     lpc_sample_buffer_size = avctx->frame_size
-                           * ctx->major_header_interval * sizeof(int32_t);
+                           * ctx->max_restart_interval * sizeof(int32_t);
 
     ctx->lpc_sample_buffer = av_malloc(lpc_sample_buffer_size);
     if (!ctx->lpc_sample_buffer) {
@@ -523,7 +523,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     }
 
     major_scratch_buffer_size = ctx->one_sample_buffer_size
-                            * ctx->major_header_interval * sizeof(int32_t);
+                            * ctx->max_restart_interval * sizeof(int32_t);
 
     ctx->major_scratch_buffer = av_malloc(major_scratch_buffer_size);
     if (!ctx->major_scratch_buffer) {
@@ -550,14 +550,14 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     ctx->num_substreams = 1;
 
     frame_size_size = sizeof(unsigned int)
-                    * ctx->major_header_interval;
+                    * ctx->max_restart_interval;
 
     ctx->frame_size = av_malloc(frame_size_size);
     if (!ctx->frame_size)
         return -1;
 
     lossless_check_data_size = sizeof(int32_t) * ctx->num_substreams
-                             * ctx->major_header_interval;
+                             * ctx->max_restart_interval;
 
     ctx->lossless_check_data = av_malloc(lossless_check_data_size);
     if (!ctx->lossless_check_data)
@@ -2104,7 +2104,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     unsigned int bytes_written = 0;
     int restart_frame;
 
-    ctx->frame_index = avctx->frame_number % ctx->major_header_interval;
+    ctx->frame_index = avctx->frame_number % ctx->max_restart_interval;
 
     ctx->inout_buffer = ctx->major_inout_buffer
                       + ctx->frame_index * ctx->one_sample_buffer_size;
@@ -2118,14 +2118,14 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     ctx->write_buffer = ctx->inout_buffer;
 
-    if (avctx->frame_number < ctx->major_header_interval) {
+    if (avctx->frame_number < ctx->max_restart_interval) {
         if (data) {
             goto input_and_return;
         } else {
             /* There are less frames than the requested major header interval.
              * Update the context to reflect this.
              */
-            ctx->major_header_interval = avctx->frame_number;
+            ctx->max_restart_interval = avctx->frame_number;
             ctx->frame_index = 0;
 
             ctx->sample_buffer = ctx->major_scratch_buffer;
@@ -2143,11 +2143,11 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
 
     if (restart_frame) {
         set_major_params(ctx);
-        if (ctx->major_header_subinterval != ctx->major_header_interval)
+        if (ctx->major_header_subinterval != ctx->max_restart_interval)
         process_major_frame(ctx);
     }
 
-    if (ctx->major_header_subinterval == ctx->major_header_interval)
+    if (ctx->major_header_subinterval == ctx->max_restart_interval)
         ctx->write_buffer = ctx->sample_buffer;
 
     avctx->coded_frame->key_frame = restart_frame;
@@ -2199,7 +2199,7 @@ input_and_return:
         analyze_sample_buffer(ctx);
     }
 
-    if (ctx->frame_index == (ctx->major_header_interval - 1)) {
+    if (ctx->frame_index == (ctx->max_restart_interval - 1)) {
         ctx->major_frame_size = ctx->next_major_frame_size;
         ctx->next_major_frame_size = 0;
 
