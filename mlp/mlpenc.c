@@ -2203,7 +2203,7 @@ input_and_return:
         }
         ctx->number_of_samples = number_of_samples;
 
-        for (index = 0; index < ctx->number_of_frames + 1; index++) {
+        for (index = 0; index < ctx->seq_size[seq_index]; index++) {
             clear_channel_params(ctx, ctx->channel_params[ctx->seq_index][ctx->frame_index][index]);
             default_decoding_params(ctx, ctx->decoding_params[ctx->seq_index][ctx->frame_index][index]);
         }
