@@ -339,7 +339,7 @@ static void copy_restart_frame_params(MLPEncodeContext *ctx,
 
         copy_matrix_params(&dp->matrix_params, &ctx->cur_decoding_params->matrix_params);
 
-        for (channel = 0; channel < MAX_CHANNELS; channel++) {
+        for (channel = 0; channel < ctx->avctx->channels; channel++) {
             ChannelParams *cp = &ctx->channel_params[ctx->seq_index][ctx->frame_index][index][channel];
             unsigned int filter;
 
@@ -370,11 +370,11 @@ static void clear_decoding_params(DecodingParams decoding_params[MAX_SUBSTREAMS]
 }
 
 /** Clears a ChannelParams struct the way it should be after a restart header. */
-static void clear_channel_params(ChannelParams channel_params[MAX_CHANNELS])
+static void clear_channel_params(MLPEncodeContext *ctx, ChannelParams channel_params[MAX_CHANNELS])
 {
     unsigned int channel;
 
-    for (channel = 0; channel < MAX_CHANNELS; channel++) {
+    for (channel = 0; channel < ctx->avctx->channels; channel++) {
         ChannelParams *cp = &channel_params[channel];
 
         memset(&cp->filter_params, 0, sizeof(cp->filter_params));
@@ -582,7 +582,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         rh->max_matrix_channel = 1;
     }
 
-    clear_channel_params(restart_channel_params);
+    clear_channel_params(ctx, restart_channel_params);
     clear_decoding_params(restart_decoding_params);
 
     dsputil_init(&ctx->dsp, avctx);
@@ -2204,7 +2204,7 @@ input_and_return:
         ctx->number_of_samples = number_of_samples;
 
         for (index = 0; index < ctx->number_of_frames + 1; index++) {
-            clear_channel_params(ctx->channel_params[ctx->seq_index][ctx->frame_index][index]);
+            clear_channel_params(ctx, ctx->channel_params[ctx->seq_index][ctx->frame_index][index]);
             default_decoding_params(ctx, ctx->decoding_params[ctx->seq_index][ctx->frame_index][index]);
         }
 
