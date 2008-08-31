@@ -141,7 +141,7 @@ typedef struct {
 
     BestOffset      best_offset[MAJOR_HEADER_INTERVAL+1][MAX_CHANNELS][NUM_CODEBOOKS];
 
-    DecodingParams  decoding_params[MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL][MAJOR_HEADER_INTERVAL+1][MAX_SUBSTREAMS];
+    DecodingParams *decoding_params;
     RestartHeader   restart_header [MAX_SUBSTREAMS];
 
     ChannelParams   major_channel_params[MAJOR_HEADER_INTERVAL+1][MAX_CHANNELS];       ///< ChannelParams to be written to bitstream.
@@ -163,6 +163,7 @@ typedef struct {
     DecodingParams *prev_decoding_params;
 
     ChannelParams  *seq_channel_params;
+    DecodingParams *seq_decoding_params;
 
     unsigned int    max_codebook_search;
 
@@ -336,10 +337,11 @@ static void copy_restart_frame_params(MLPEncodeContext *ctx,
                                       unsigned int substr)
 {
     ChannelParams (*seq_cp)[ctx->avctx->channels] = (ChannelParams (*)[ctx->avctx->channels]) ctx->seq_channel_params;
+    DecodingParams (*seq_dp)[ctx->num_substreams] = (DecodingParams (*)[ctx->num_substreams]) ctx->seq_decoding_params;
     unsigned int index;
 
     for (index = 0; index < ctx->number_of_frames + 1; index++) {
-        DecodingParams *dp = &ctx->decoding_params[ctx->seq_index][ctx->frame_index][index][substr];
+        DecodingParams *dp = &seq_dp[index][substr];
         unsigned int channel;
 
         copy_matrix_params(&dp->matrix_params, &ctx->cur_decoding_params->matrix_params);
@@ -459,6 +461,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     unsigned int major_scratch_buffer_size;
     unsigned int lossless_check_data_size;
     unsigned int lpc_sample_buffer_size;
+    unsigned int decoding_params_size;
     unsigned int channel_params_size;
     unsigned int frame_size_size;
     unsigned int substr, index;
@@ -584,6 +587,15 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
                         * ctx->avctx->channels * sizeof(ChannelParams);
     ctx->channel_params = av_malloc(channel_params_size);
     if (!ctx->channel_params) {
+        av_log(avctx, AV_LOG_ERROR,
+               "Not enough memory for analysis context.\n");
+        return -1;
+    }
+
+    decoding_params_size = ctx->restart_intervals * ctx->sequence_size
+                         * ctx->num_substreams * sizeof(DecodingParams);
+    ctx->decoding_params = av_malloc(decoding_params_size);
+    if (!ctx->decoding_params) {
         av_log(avctx, AV_LOG_ERROR,
                "Not enough memory for analysis context.\n");
         return -1;
@@ -2037,8 +2049,17 @@ static void set_major_params(MLPEncodeContext *ctx)
 {
     ChannelParams (*channel_params)[ctx->sequence_size][ctx->avctx->channels] =
                  (ChannelParams (*)[ctx->sequence_size][ctx->avctx->channels]) ctx->channel_params;
+    DecodingParams (*decoding_params)[ctx->sequence_size][ctx->num_substreams] =
+                  (DecodingParams (*)[ctx->sequence_size][ctx->num_substreams]) ctx->decoding_params;
     unsigned int index;
     unsigned int substr;
+
+    for (substr = 0; substr < ctx->num_substreams; substr++) {
+        DecodingParams (*seq_dp)[ctx->num_substreams] =
+             (DecodingParams (*)[ctx->num_substreams]) &decoding_params[ctx->restart_intervals - 1][ctx->seq_offset[ctx->restart_intervals - 1]];
+        for (index = 0; index < ctx->seq_size[ctx->restart_intervals-1]; index++)
+            memcpy(&ctx->major_decoding_params[index][substr], &seq_dp[index][substr], sizeof(DecodingParams));
+    }
 
     {
         ChannelParams (*seq_cp)[ctx->avctx->channels] =
@@ -2050,7 +2071,6 @@ static void set_major_params(MLPEncodeContext *ctx)
             }
         }
     }
-    memcpy(ctx->major_decoding_params, ctx->decoding_params[ctx->restart_intervals-1][MAJOR_HEADER_INTERVAL-1], sizeof(ctx->major_decoding_params));
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
 
@@ -2060,7 +2080,7 @@ static void set_major_params(MLPEncodeContext *ctx)
         ctx->prev_channel_params = restart_channel_params;
 
         for (index = 0; index < MAJOR_HEADER_INTERVAL + 1; index++) {
-                ctx->cur_decoding_params = &ctx->decoding_params[ctx->restart_intervals-1][MAJOR_HEADER_INTERVAL-1][index][substr];
+                ctx->cur_decoding_params = &ctx->major_decoding_params[index][substr];
                 ctx->cur_channel_params = ctx->major_channel_params[index];
 
                 ctx->major_params_changed[index][substr] = compare_decoding_params(ctx);
@@ -2074,6 +2094,7 @@ static void set_major_params(MLPEncodeContext *ctx)
 static void analyze_sample_buffer(MLPEncodeContext *ctx)
 {
     ChannelParams (*seq_cp)[ctx->avctx->channels] = (ChannelParams (*)[ctx->avctx->channels]) ctx->seq_channel_params;
+    DecodingParams (*seq_dp)[ctx->num_substreams] = (DecodingParams (*)[ctx->num_substreams]) ctx->seq_decoding_params;
     unsigned int index;
     unsigned int substr;
 
@@ -2082,13 +2103,13 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
         ctx->cur_restart_header = &ctx->restart_header[substr];
 
         for (index = 0; index < ctx->number_of_frames; index++) {
-            DecodingParams *dp = &ctx->decoding_params[ctx->seq_index][ctx->frame_index][index + 1][substr];
+            DecodingParams *dp = &seq_dp[index + 1][substr];
             dp->blocksize = ctx->frame_size[index];
         }
-        ctx->decoding_params[ctx->seq_index][ctx->frame_index][0][substr].blocksize  = 8;
-        ctx->decoding_params[ctx->seq_index][ctx->frame_index][1][substr].blocksize -= 8;
+        seq_dp[0][substr].blocksize  = 8;
+        seq_dp[1][substr].blocksize -= 8;
 
-        ctx->cur_decoding_params = &ctx->decoding_params[ctx->seq_index][ctx->frame_index][1][substr];
+        ctx->cur_decoding_params = &seq_dp[1][substr];
         ctx->cur_channel_params = seq_cp[1];
 
         generate_2_noise_channels(ctx);
@@ -2101,7 +2122,7 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
         copy_restart_frame_params(ctx, substr);
 
         for (index = 0; index < ctx->number_of_frames + 1; index++) {
-                ctx->cur_decoding_params = &ctx->decoding_params[ctx->seq_index][ctx->frame_index][index][substr];
+                ctx->cur_decoding_params = &seq_dp[index][substr];
                 ctx->cur_channel_params = seq_cp[index];
                 ctx->cur_best_offset = ctx->best_offset[index];
                 determine_bits(ctx);
@@ -2215,12 +2236,15 @@ input_and_return:
     if (!restart_frame) {
     ChannelParams (*channel_params)[ctx->sequence_size][ctx->avctx->channels] =
                  (ChannelParams (*)[ctx->sequence_size][ctx->avctx->channels]) ctx->channel_params;
+    DecodingParams (*decoding_params)[ctx->sequence_size][ctx->num_substreams] =
+                  (DecodingParams (*)[ctx->sequence_size][ctx->num_substreams]) ctx->decoding_params;
     int seq_index;
 
     for (seq_index = 0;
          seq_index < ctx->restart_intervals && (seq_index * ctx->min_restart_interval) <= ctx->avctx->frame_number;
          seq_index++) {
         ChannelParams (*seq_cp)[ctx->avctx->channels] = &channel_params[(ctx->frame_index / ctx->min_restart_interval)][ctx->seq_offset[seq_index]];
+        DecodingParams (*seq_dp)[ctx->num_substreams] = &decoding_params[(ctx->frame_index / ctx->min_restart_interval)][ctx->seq_offset[seq_index]];
         unsigned int number_of_samples = 0;
         unsigned int index;
 
@@ -2232,6 +2256,7 @@ input_and_return:
                                   - (seq_index * ctx->min_restart_interval)) % ctx->max_restart_interval;
         ctx->number_of_frames = ctx->seq_size[seq_index] - 1;
         ctx->seq_channel_params = (ChannelParams *) seq_cp;
+        ctx->seq_decoding_params = (DecodingParams *) seq_dp;
 
         for (index = 0; index < ctx->number_of_frames; index++) {
             number_of_samples += ctx->frame_size[(ctx->starting_frame_index + index) % ctx->max_restart_interval];
@@ -2240,7 +2265,7 @@ input_and_return:
 
         for (index = 0; index < ctx->seq_size[seq_index]; index++) {
             clear_channel_params(ctx, seq_cp[index]);
-            default_decoding_params(ctx, ctx->decoding_params[ctx->seq_index][ctx->frame_index][index]);
+            default_decoding_params(ctx, seq_dp[index]);
         }
 
         input_to_sample_buffer(ctx);
@@ -2270,6 +2295,7 @@ static av_cold int mlp_encode_close(AVCodecContext *avctx)
     av_freep(&ctx->major_scratch_buffer);
     av_freep(&ctx->major_inout_buffer);
     av_freep(&ctx->lpc_sample_buffer);
+    av_freep(&ctx->decoding_params);
     av_freep(&ctx->channel_params);
     av_freep(&avctx->coded_frame);
     av_freep(&ctx->frame_size);
