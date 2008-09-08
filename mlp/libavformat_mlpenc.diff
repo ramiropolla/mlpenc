@@ -1,8 +1,8 @@
 Index: libavformat/Makefile
 ===================================================================
---- libavformat/Makefile	(revision 14793)
+--- libavformat/Makefile	(revision 15277)
 +++ libavformat/Makefile	(working copy)
-@@ -81,6 +81,7 @@
+@@ -83,6 +83,7 @@
  OBJS-$(CONFIG_MJPEG_DEMUXER)             += raw.o
  OBJS-$(CONFIG_MJPEG_MUXER)               += raw.o
  OBJS-$(CONFIG_MLP_DEMUXER)               += raw.o
@@ -12,9 +12,9 @@ Index: libavformat/Makefile
  OBJS-$(CONFIG_MMF_MUXER)                 += mmf.o riff.o
 Index: libavformat/raw.c
 ===================================================================
---- libavformat/raw.c	(revision 14793)
+--- libavformat/raw.c	(revision 15277)
 +++ libavformat/raw.c	(working copy)
-@@ -849,6 +849,21 @@
+@@ -896,6 +896,21 @@
  };
  #endif
  
@@ -38,9 +38,9 @@ Index: libavformat/raw.c
      "mpeg1video",
 Index: libavformat/allformats.c
 ===================================================================
---- libavformat/allformats.c	(revision 14793)
+--- libavformat/allformats.c	(revision 15277)
 +++ libavformat/allformats.c	(working copy)
-@@ -100,7 +100,7 @@
+@@ -102,7 +102,7 @@
      REGISTER_MUXDEMUX (MATROSKA, matroska);
      REGISTER_MUXER    (MATROSKA_AUDIO, matroska_audio);
      REGISTER_MUXDEMUX (MJPEG, mjpeg);
