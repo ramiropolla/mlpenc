@@ -491,7 +491,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     switch (avctx->sample_fmt) {
     case SAMPLE_FMT_S16: ctx->sample_fmt = BITS_16; break;
     /* TODO 20 bits: */
-    case SAMPLE_FMT_S24: ctx->sample_fmt = BITS_24; break;
+    case SAMPLE_FMT_S32: ctx->sample_fmt = BITS_24; break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Sample format not supported. "
                "Only 16- and 24-bit samples are supported.\n");
@@ -1235,7 +1235,7 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
 /** Wrapper function for inputting data in two different bit-depths. */
 static void input_data(MLPEncodeContext *ctx, void *samples)
 {
-    if (ctx->avctx->sample_fmt == SAMPLE_FMT_S24)
+    if (ctx->avctx->sample_fmt == SAMPLE_FMT_S32)
         input_data_internal(ctx, samples, 1);
     else
         input_data_internal(ctx, samples, 0);
@@ -2307,6 +2307,6 @@ AVCodec mlp_encoder = {
     mlp_encode_frame,
     mlp_encode_close,
     .capabilities = CODEC_CAP_SMALL_LAST_FRAME | CODEC_CAP_DELAY,
-    .sample_fmts = (enum SampleFormat[]){SAMPLE_FMT_S16,SAMPLE_FMT_S24,SAMPLE_FMT_NONE},
+    .sample_fmts = (enum SampleFormat[]){SAMPLE_FMT_S16,SAMPLE_FMT_S32,SAMPLE_FMT_NONE},
     .long_name = NULL_IF_CONFIG_SMALL("Meridian Lossless Packing"),
 };
