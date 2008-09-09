@@ -101,6 +101,7 @@ typedef struct {
 
     int             coded_sample_fmt [2];   ///< sample format encoded for MLP
     int             coded_sample_rate[2];   ///< sample rate encoded for MLP
+    int             coded_peak_bitrate;     ///< peak bitrate for this major sync header
 
     int32_t        *inout_buffer;           ///< Pointer to data currently being read from lavc or written to bitstream.
     int32_t        *major_inout_buffer;     ///< Buffer with all in/out data for one entire major frame interval.
@@ -440,6 +441,11 @@ enum InputBitDepth {
     BITS_24,
 };
 
+static int mlp_peak_bitrate(int peak_bitrate, int sample_rate)
+{
+    return ((peak_bitrate << 4) - 8) / sample_rate;
+}
+
 /** Returns the coded sample_rate for MLP. */
 static int mlp_sample_rate(int sample_rate)
 {
@@ -481,6 +487,9 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         return -1;
     }
     ctx->coded_sample_rate[1] = -1 & 0xf;
+
+    /* TODO Keep count of bitrate and calculate real value. */
+    ctx->coded_peak_bitrate = mlp_peak_bitrate(9600000, avctx->sample_rate);
 
     /* TODO support more channels. */
     if (avctx->channels > 2) {
@@ -762,9 +771,7 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
     put_bits(&pb,  1, 1); /* is_vbr: This value is 1 in all tested MLP samples.
                            * I suppose it would be 0 only when no filters
                            * or codebooks are used. */
-    put_bits(&pb, 15, 0); /* TODO peak_bitrate: Most MLP samples tested encode
-                           * a value that evaluates peak_bitrate to 9600000 or
-                           * a little bit less. */
+    put_bits(&pb, 15, ctx->coded_peak_bitrate);
     put_bits(&pb,  4, 1); /* TODO Support more num_substreams. */
 
     put_bits(&pb, 20, 0x1054c); /* TODO These values have something to do with
