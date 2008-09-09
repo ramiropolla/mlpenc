@@ -99,8 +99,8 @@ typedef struct {
     int             num_channels;   /**< Number of channels in major_scratch_buffer.
                                      *   Normal channels + noise channels. */
 
-    int             coded_sample_fmt;       ///< sample format encoded for MLP
-    int             coded_sample_rate;      ///< sample rate encoded for MLP
+    int             coded_sample_fmt [2];   ///< sample format encoded for MLP
+    int             coded_sample_rate[2];   ///< sample rate encoded for MLP
 
     int32_t        *inout_buffer;           ///< Pointer to data currently being read from lavc or written to bitstream.
     int32_t        *major_inout_buffer;     ///< Buffer with all in/out data for one entire major frame interval.
@@ -473,13 +473,14 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 
     ctx->avctx = avctx;
 
-    ctx->coded_sample_rate = mlp_sample_rate(avctx->sample_rate);
-    if (ctx->coded_sample_rate < 0) {
+    ctx->coded_sample_rate[0] = mlp_sample_rate(avctx->sample_rate);
+    if (ctx->coded_sample_rate[0] < 0) {
         av_log(avctx, AV_LOG_ERROR, "Unsupported sample rate %d. Supported "
                             "sample rates are 44100, 88200, 176400, 48000, "
                             "96000, and 192000.\n", avctx->sample_rate);
         return -1;
     }
+    ctx->coded_sample_rate[1] = -1 & 0xf;
 
     /* TODO support more channels. */
     if (avctx->channels > 2) {
@@ -489,16 +490,17 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     }
 
     switch (avctx->sample_fmt) {
-    case SAMPLE_FMT_S16: ctx->coded_sample_fmt = BITS_16; break;
+    case SAMPLE_FMT_S16: ctx->coded_sample_fmt[0] = BITS_16; break;
     /* TODO 20 bits: */
-    case SAMPLE_FMT_S32: ctx->coded_sample_fmt = BITS_24; break;
+    case SAMPLE_FMT_S32: ctx->coded_sample_fmt[0] = BITS_24; break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Sample format not supported. "
                "Only 16- and 24-bit samples are supported.\n");
         return -1;
     }
+    ctx->coded_sample_fmt[1] = -1 & 0xf;
 
-    avctx->frame_size  = 40 << (ctx->coded_sample_rate & 0x7);
+    avctx->frame_size  = 40 << (ctx->coded_sample_rate[0] & 0x7);
     avctx->coded_frame = avcodec_alloc_frame();
 
     ctx->num_channels = avctx->channels + 2; /* +2 noise channels */
@@ -744,10 +746,10 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
 
     put_bits(&pb, 24, SYNC_MAJOR           );
     put_bits(&pb,  8, SYNC_MLP             );
-    put_bits(&pb,  4, ctx->coded_sample_fmt);
-    put_bits(&pb,  4, ctx->coded_sample_fmt);
-    put_bits(&pb,  4, ctx->coded_sample_rate);
-    put_bits(&pb,  4, ctx->coded_sample_rate);
+    put_bits(&pb,  4, ctx->coded_sample_fmt [0]);
+    put_bits(&pb,  4, ctx->coded_sample_fmt [1]);
+    put_bits(&pb,  4, ctx->coded_sample_rate[0]);
+    put_bits(&pb,  4, ctx->coded_sample_rate[1]);
     put_bits(&pb, 11, 0                    ); /* This value is 0 in all tested
                                                * MLP samples. */
     put_bits(&pb,  5, ctx->mlp_channels);
