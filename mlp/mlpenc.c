@@ -1121,6 +1121,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 /** Writes the access unit and substream headers to the bitstream. */
 static void write_frame_headers(MLPEncodeContext *ctx, uint8_t *frame_header,
                                 uint8_t *substream_headers, unsigned int length,
+                                int restart_frame,
                                 uint16_t substream_data_len[MAX_SUBSTREAMS])
 {
     uint16_t access_unit_header = 0;
@@ -1134,7 +1135,7 @@ static void write_frame_headers(MLPEncodeContext *ctx, uint8_t *frame_header,
         uint16_t substr_hdr = 0;
 
         substr_hdr |= (0 << 15); /* extraword */
-        substr_hdr |= (0 << 14); /* ??? */
+        substr_hdr |= (!restart_frame << 14); /* !restart_frame */
         substr_hdr |= (1 << 13); /* checkdata */
         substr_hdr |= (0 << 12); /* ??? */
         substr_hdr |= (substream_data_len[substr] / 2) & 0x0FFF;
@@ -1194,7 +1195,7 @@ static unsigned int write_access_unit(MLPEncodeContext *ctx, uint8_t *buf,
 
     total_length = buf - buf0;
 
-    write_frame_headers(ctx, buf0, buf1, total_length / 2, substream_data_len);
+    write_frame_headers(ctx, buf0, buf1, total_length / 2, restart_frame, substream_data_len);
 
     return total_length;
 }
