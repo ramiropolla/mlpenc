@@ -779,7 +779,8 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
                                  * from samples that are stereo and have
                                  * 44100Hz. */
     put_bits(&pb,  8, ctx->mlp_channels2);
-    put_bits(&pb, 32, 0x00008080        ); /* These values seem */
+    put_bits(&pb, 16, 0x0000);
+    put_bits(&pb, 16, 0x8080); /* These values seem */
     put_bits(&pb,  8, 0x00              ); /* to be constants.  */
     put_bits(&pb,  8, ctx->mlp_channels3); /* TODO Finish understanding this field. */
 
