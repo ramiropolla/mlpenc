@@ -44,6 +44,8 @@ typedef struct {
     int             data_check_present;  ///< Set if the substream contains extra info to check the size of VLC blocks.
 
     int32_t         lossless_check_data; ///< XOR of all output samples
+
+    uint8_t         max_huff_lsbs;       ///< largest huff_lsbs
 } RestartHeader;
 
 typedef struct {
@@ -809,7 +811,9 @@ static void write_restart_header(MLPEncodeContext *ctx, PutBitContext *pb)
     put_bits(pb,  4, rh->max_matrix_channel);
     put_bits(pb,  4, rh->noise_shift       );
     put_bits(pb, 23, rh->noisegen_seed     );
-    put_bits(pb, 19, 0                     ); /* TODO What the hell is this? */
+    put_bits(pb,  4, 0                     ); /* TODO still unknown */
+    put_bits(pb,  5, rh->max_huff_lsbs     );
+    put_bits(pb, 10, 0                     ); /* TODO still unknown */
     put_bits(pb,  1, rh->data_check_present);
     put_bits(pb,  8, lossless_check        );
     put_bits(pb, 16, 0                     ); /* This is zero =) */
@@ -2053,12 +2057,14 @@ static void set_best_codebook(MLPEncodeContext *ctx)
  */
 static void set_major_params(MLPEncodeContext *ctx)
 {
+    RestartHeader *rh = ctx->cur_restart_header;
     ChannelParams (*channel_params)[ctx->sequence_size][ctx->avctx->channels] =
                  (ChannelParams (*)[ctx->sequence_size][ctx->avctx->channels]) ctx->channel_params;
     DecodingParams (*decoding_params)[ctx->sequence_size][ctx->num_substreams] =
                   (DecodingParams (*)[ctx->sequence_size][ctx->num_substreams]) ctx->decoding_params;
     unsigned int index;
     unsigned int substr;
+    uint8_t max_huff_lsbs = 0;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams (*seq_dp)[ctx->num_substreams] =
@@ -2073,10 +2079,14 @@ static void set_major_params(MLPEncodeContext *ctx)
         unsigned int channel;
         for (index = 0; index < ctx->seq_size[ctx->restart_intervals-1]; index++) {
             for (channel = 0; channel < ctx->avctx->channels; channel++) {
+                if (max_huff_lsbs < seq_cp[index][channel].huff_lsbs)
+                    max_huff_lsbs = seq_cp[index][channel].huff_lsbs;
                 memcpy(&ctx->major_channel_params[index][channel], &seq_cp[index][channel], sizeof(ChannelParams));
             }
         }
     }
+
+    rh->max_huff_lsbs = max_huff_lsbs;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
 
