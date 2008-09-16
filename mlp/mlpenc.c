@@ -129,6 +129,7 @@ typedef struct {
     unsigned int    restart_intervals;      ///< Number of possible major frame sizes.
 
     uint16_t        timestamp;              ///< Timestamp of current access unit.
+    uint16_t        dts;                    ///< Decoding timestamp of current access unit.
 
     uint8_t         mlp_channels;           ///< channel arrangement for MLP streams
 
@@ -514,6 +515,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     avctx->frame_size  = 40 << (ctx->coded_sample_rate[0] & 0x7);
     avctx->coded_frame = avcodec_alloc_frame();
 
+    ctx->dts = -avctx->frame_size;
+
     ctx->num_channels = avctx->channels + 2; /* +2 noise channels */
     ctx->one_sample_buffer_size = avctx->frame_size
                                 * ctx->num_channels;
@@ -805,7 +808,7 @@ static void write_restart_header(MLPEncodeContext *ctx, PutBitContext *pb)
     unsigned int ch;
 
     put_bits(pb, 14, 0x31ea                ); /* TODO 0x31eb */
-    put_bits(pb, 16, 0                     ); /* TODO I don't know what this is. Ask Ian. */
+    put_bits(pb, 16, ctx->timestamp        );
     put_bits(pb,  4, rh->min_channel       );
     put_bits(pb,  4, rh->max_channel       );
     put_bits(pb,  4, rh->max_matrix_channel);
@@ -1132,7 +1135,7 @@ static void write_frame_headers(MLPEncodeContext *ctx, uint8_t *frame_header,
     uint16_t parity_nibble = 0;
     unsigned int substr;
 
-    parity_nibble  = ctx->timestamp;
+    parity_nibble  = ctx->dts;
     parity_nibble ^= length;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
@@ -1158,7 +1161,7 @@ static void write_frame_headers(MLPEncodeContext *ctx, uint8_t *frame_header,
     access_unit_header |= length & 0xFFF;
 
     AV_WB16(frame_header  , access_unit_header);
-    AV_WB16(frame_header+2, ctx->timestamp    );
+    AV_WB16(frame_header+2, ctx->dts          );
 }
 
 /** Writes an entire access unit to the bitstream. */
@@ -2236,6 +2239,7 @@ static int mlp_encode_frame(AVCodecContext *avctx, uint8_t *buf, int buf_size,
     bytes_written = write_access_unit(ctx, buf, buf_size, restart_frame);
 
     ctx->timestamp += ctx->frame_size[ctx->frame_index];
+    ctx->dts       += ctx->frame_size[ctx->frame_index];
 
 input_and_return:
 
