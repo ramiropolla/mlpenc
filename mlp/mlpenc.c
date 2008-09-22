@@ -1393,7 +1393,7 @@ static void set_filter_params(MLPEncodeContext *ctx,
         }
 
         order = ff_lpc_calc_coefs(&ctx->dsp, ctx->lpc_sample_buffer, ctx->number_of_samples,
-                                  MLP_MIN_LPC_ORDER, MLP_MAX_LPC_ORDER, 7,
+                                  MLP_MIN_LPC_ORDER, MLP_MAX_LPC_ORDER, 11,
                                   coefs, shift, 1,
                                   ORDER_METHOD_EST, MLP_MIN_LPC_SHIFT, MLP_MAX_LPC_SHIFT, MLP_MIN_LPC_SHIFT);
 
