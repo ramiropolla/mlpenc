@@ -31,7 +31,8 @@
 
 #define MLP_MIN_LPC_ORDER      1
 #define MLP_MAX_LPC_ORDER      8
-#define MLP_MAX_LPC_SHIFT     16
+#define MLP_MIN_LPC_SHIFT      8
+#define MLP_MAX_LPC_SHIFT     15
 
 typedef struct {
     uint8_t         min_channel;         ///< The index of the first channel coded in this substream.
@@ -1394,7 +1395,7 @@ static void set_filter_params(MLPEncodeContext *ctx,
         order = ff_lpc_calc_coefs(&ctx->dsp, ctx->lpc_sample_buffer, ctx->number_of_samples,
                                   MLP_MIN_LPC_ORDER, MLP_MAX_LPC_ORDER, 7,
                                   coefs, shift, 1,
-                                  ORDER_METHOD_EST, MLP_MAX_LPC_SHIFT, 0);
+                                  ORDER_METHOD_EST, MLP_MIN_LPC_SHIFT, MLP_MAX_LPC_SHIFT, MLP_MIN_LPC_SHIFT);
 
         fp->order = order;
         fp->shift = shift[order-1];
