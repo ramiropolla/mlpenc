@@ -538,8 +538,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 
     /* TODO Let user pass parameters for LPC filter. */
 
-    size = avctx->frame_size
-                           * ctx->max_restart_interval * sizeof(int32_t);
+    size = sizeof(int32_t) * avctx->frame_size * ctx->max_restart_interval;
 
     ctx->lpc_sample_buffer = av_malloc(size);
     if (!ctx->lpc_sample_buffer) {
@@ -548,8 +547,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         return -1;
     }
 
-    size = ctx->one_sample_buffer_size
-                            * ctx->max_restart_interval * sizeof(int32_t);
+    size = sizeof(int32_t)
+         * ctx->one_sample_buffer_size * ctx->max_restart_interval;
 
     ctx->major_scratch_buffer = av_malloc(size);
     if (!ctx->major_scratch_buffer) {
@@ -575,15 +574,14 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     ctx->mlp_channels3  = get_channels3_code(avctx->channels);
     ctx->num_substreams = 1;
 
-    size = sizeof(unsigned int)
-                    * ctx->max_restart_interval;
+    size = sizeof(unsigned int) * ctx->max_restart_interval;
 
     ctx->frame_size = av_malloc(size);
     if (!ctx->frame_size)
         return -1;
 
-    size = sizeof(int32_t) * ctx->num_substreams
-                             * ctx->max_restart_interval;
+    size = sizeof(int32_t)
+         * ctx->num_substreams * ctx->max_restart_interval;
 
     ctx->lossless_check_data = av_malloc(size);
     if (!ctx->lossless_check_data)
@@ -595,8 +593,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         sum += ctx->seq_size[index];
     }
     ctx->sequence_size = sum;
-    size = ctx->restart_intervals * ctx->sequence_size
-                        * ctx->avctx->channels * sizeof(ChannelParams);
+    size = sizeof(ChannelParams)
+         * ctx->restart_intervals * ctx->sequence_size * ctx->avctx->channels;
     ctx->channel_params = av_malloc(size);
     if (!ctx->channel_params) {
         av_log(avctx, AV_LOG_ERROR,
@@ -604,8 +602,8 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         return -1;
     }
 
-    size = ctx->restart_intervals * ctx->sequence_size
-                         * ctx->num_substreams * sizeof(DecodingParams);
+    size = sizeof(DecodingParams)
+         * ctx->restart_intervals * ctx->sequence_size * ctx->num_substreams;
     ctx->decoding_params = av_malloc(size);
     if (!ctx->decoding_params) {
         av_log(avctx, AV_LOG_ERROR,
