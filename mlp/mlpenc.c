@@ -2070,15 +2070,11 @@ static void set_major_params(MLPEncodeContext *ctx)
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams (*seq_dp)[ctx->num_substreams] =
              (DecodingParams (*)[ctx->num_substreams]) &decoding_params[ctx->restart_intervals - 1][ctx->seq_offset[ctx->restart_intervals - 1]];
-        for (index = 0; index < ctx->seq_size[ctx->restart_intervals-1]; index++)
-            memcpy(&ctx->major_decoding_params[index][substr], &seq_dp[index][substr], sizeof(DecodingParams));
-    }
-
-    {
         ChannelParams (*seq_cp)[ctx->avctx->channels] =
              (ChannelParams (*)[ctx->avctx->channels]) &channel_params[ctx->restart_intervals - 1][ctx->seq_offset[ctx->restart_intervals - 1]];
         unsigned int channel;
         for (index = 0; index < ctx->seq_size[ctx->restart_intervals-1]; index++) {
+            memcpy(&ctx->major_decoding_params[index][substr], &seq_dp[index][substr], sizeof(DecodingParams));
             for (channel = 0; channel < ctx->avctx->channels; channel++) {
                 if (max_huff_lsbs < seq_cp[index][channel].huff_lsbs)
                     max_huff_lsbs = seq_cp[index][channel].huff_lsbs;
