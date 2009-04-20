@@ -2331,5 +2331,5 @@ AVCodec mlp_encoder = {
     mlp_encode_close,
     .capabilities = CODEC_CAP_SMALL_LAST_FRAME | CODEC_CAP_DELAY,
     .sample_fmts = (enum SampleFormat[]){SAMPLE_FMT_S16,SAMPLE_FMT_S32,SAMPLE_FMT_NONE},
-    .long_name = NULL_IF_CONFIG_SMALL("Meridian Lossless Packing"),
+    .long_name = NULL_IF_CONFIG_SMALL("MLP (Meridian Lossless Packing)"),
 };
