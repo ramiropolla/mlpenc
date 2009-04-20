@@ -1752,12 +1752,10 @@ static void determine_bits(MLPEncodeContext *ctx)
 
         if (!cp->filter_params[FIR].order) {
             no_codebook_bits(ctx, channel, min, max, &ctx->cur_best_offset[channel][0]);
+            offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
         } else {
             no_codebook_bits_offset(ctx, channel, offset, min, max, &ctx->cur_best_offset[channel][0]);
         }
-
-        if (!cp->filter_params[FIR].order)
-            offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
 
         for (i = 1; i < NUM_CODEBOOKS; i++) {
             BestOffset temp_bo = { 0, INT_MAX, 0, 0, 0, };
