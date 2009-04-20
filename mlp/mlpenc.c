@@ -801,10 +801,9 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
     put_bits(&pb,  3, 0                        ); /* ignored */
     put_bits(&pb,  5, ctx->channel_arrangement);
 
-    /* These values seem to be constant for all tested MLP samples. */
     put_bits(&pb, 16, MAJOR_SYNC_INFO_SIGNATURE);
     put_bits(&pb, 16, ctx->flags               );
-    put_bits(&pb, 16, 0x0000);
+    put_bits(&pb, 16, 0                        ); /* ignored */
 
     put_bits(&pb,  1, 1); /* is_vbr: This value is 1 in all tested MLP samples.
                            * I suppose it would be 0 only when no filters
