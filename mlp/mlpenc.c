@@ -2114,14 +2114,6 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
     for (substr = 0; substr < ctx->num_substreams; substr++) {
 
         ctx->cur_restart_header = &ctx->restart_header[substr];
-
-        for (index = 0; index < ctx->number_of_frames; index++) {
-            DecodingParams *dp = &seq_dp[index + 1][substr];
-            dp->blocksize = ctx->frame_size[index];
-        }
-        seq_dp[0][substr].blocksize  = 8;
-        seq_dp[1][substr].blocksize -= 8;
-
         ctx->cur_decoding_params = &seq_dp[1][substr];
         ctx->cur_channel_params = seq_cp[1];
 
@@ -2133,6 +2125,13 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
         apply_filters            (ctx);
 
         copy_restart_frame_params(ctx, substr);
+
+        for (index = 0; index < ctx->number_of_frames; index++) {
+            DecodingParams *dp = &seq_dp[index + 1][substr];
+            dp->blocksize = ctx->frame_size[index];
+        }
+        seq_dp[0][substr].blocksize  = 8;
+        seq_dp[1][substr].blocksize -= 8;
 
         for (index = 0; index < ctx->number_of_frames + 1; index++) {
                 ctx->cur_decoding_params = &seq_dp[index][substr];
