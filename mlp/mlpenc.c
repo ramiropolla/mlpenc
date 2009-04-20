@@ -153,6 +153,10 @@ typedef struct {
     DecodingParams  major_decoding_params[MAJOR_HEADER_INTERVAL+1][MAX_SUBSTREAMS];    ///< DecodingParams to be written to bitstream.
     int             major_params_changed[MAJOR_HEADER_INTERVAL+1][MAX_SUBSTREAMS];     ///< params_changed to be written to bitstream.
 
+    unsigned int    major_cur_subblock_index;
+    unsigned int    major_filter_state_subblock;
+    unsigned int    major_number_of_subblocks;
+
     BestOffset    (*cur_best_offset)[NUM_CODEBOOKS];
     ChannelParams  *cur_channel_params;
     DecodingParams *cur_decoding_params;
@@ -162,6 +166,7 @@ typedef struct {
     unsigned int    starting_frame_index;
     unsigned int    number_of_frames;
     unsigned int    number_of_samples;
+    unsigned int    number_of_subblocks;
     unsigned int    seq_index;              ///< Sequence index for high compression levels.
 
     ChannelParams  *prev_channel_params;
@@ -345,7 +350,7 @@ static void copy_restart_frame_params(MLPEncodeContext *ctx,
     DecodingParams (*seq_dp)[ctx->num_substreams] = (DecodingParams (*)[ctx->num_substreams]) ctx->seq_decoding_params;
     unsigned int index;
 
-    for (index = 0; index < ctx->number_of_frames + 1; index++) {
+    for (index = 0; index < ctx->number_of_subblocks; index++) {
         DecodingParams *dp = &seq_dp[index][substr];
         unsigned int channel;
 
@@ -1050,7 +1055,9 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
     lossless_check_data += ctx->frame_index * ctx->num_substreams;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
-        unsigned int subblock, num_subblocks = restart_frame;
+        unsigned int cur_subblock_index = ctx->major_cur_subblock_index;
+        unsigned int num_subblocks = ctx->major_filter_state_subblock;
+        unsigned int subblock;
         RestartHeader  *rh = &ctx->restart_header [substr];
         int substr_restart_frame = restart_frame;
         uint8_t parity, checksum;
@@ -1064,7 +1071,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
         for (subblock = 0; subblock <= num_subblocks; subblock++) {
             unsigned int subblock_index;
 
-            subblock_index = ctx->frame_index + 1 - num_subblocks + subblock;
+            subblock_index = cur_subblock_index++;
 
             ctx->cur_decoding_params = &ctx->major_decoding_params[subblock_index][substr];
             ctx->cur_channel_params = ctx->major_channel_params[subblock_index];
@@ -1121,6 +1128,9 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
         buf += put_bits_count(&pb) >> 3;
     }
+
+    ctx->major_cur_subblock_index += ctx->major_filter_state_subblock + 1;
+    ctx->major_filter_state_subblock = 0;
 
     return buf;
 }
@@ -1992,7 +2002,7 @@ static void set_best_codebook(MLPEncodeContext *ctx)
 
         clear_path_counter(path_counter);
 
-        for (index = 0; index < ctx->number_of_frames + 1; index++) {
+        for (index = 0; index < ctx->number_of_subblocks; index++) {
             unsigned int best_bitcount = INT_MAX;
             unsigned int codebook;
 
@@ -2043,7 +2053,7 @@ static void set_best_codebook(MLPEncodeContext *ctx)
         best_path = path_counter[NUM_CODEBOOKS].path + 1;
 
         /* Update context. */
-        for (index = 0; index < ctx->number_of_frames + 1; index++) {
+        for (index = 0; index < ctx->number_of_subblocks; index++) {
             ChannelParams *cp = &seq_cp[index][channel];
 
             best_codebook = *best_path++ - ZERO_PATH;
@@ -2106,6 +2116,10 @@ static void set_major_params(MLPEncodeContext *ctx)
                 ctx->prev_channel_params = ctx->cur_channel_params;
         }
     }
+
+    ctx->major_number_of_subblocks = ctx->number_of_subblocks;
+    ctx->major_filter_state_subblock = 1;
+    ctx->major_cur_subblock_index = 0;
 }
 
 static void analyze_sample_buffer(MLPEncodeContext *ctx)
@@ -2130,14 +2144,21 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
 
         copy_restart_frame_params(ctx, substr);
 
+        /* Copy frame_size from frames 0...max to decoding_params 1...max + 1
+         * decoding_params[0] is for the filter state subblock.
+         */
         for (index = 0; index < ctx->number_of_frames; index++) {
             DecodingParams *dp = &seq_dp[index + 1][substr];
             dp->blocksize = ctx->frame_size[index];
         }
+        /* The official encoder seems to always encode a filter state subblock
+         * even if there are no filters. TODO check if it is possible to skip
+         * the filter state subblock for no filters.
+         */
         seq_dp[0][substr].blocksize  = 8;
         seq_dp[1][substr].blocksize -= 8;
 
-        for (index = 0; index < ctx->number_of_frames + 1; index++) {
+        for (index = 0; index < ctx->number_of_subblocks; index++) {
                 ctx->cur_decoding_params = &seq_dp[index][substr];
                 ctx->cur_channel_params = seq_cp[index];
                 ctx->cur_best_offset = ctx->best_offset[index];
@@ -2272,6 +2293,7 @@ input_and_return:
         ctx->starting_frame_index = (ctx->avctx->frame_number - (ctx->avctx->frame_number % ctx->min_restart_interval)
                                   - (seq_index * ctx->min_restart_interval)) % ctx->max_restart_interval;
         ctx->number_of_frames = ctx->seq_size[seq_index] - 1;
+        ctx->number_of_subblocks = ctx->seq_size[seq_index];
         ctx->seq_channel_params = (ChannelParams *) seq_cp;
         ctx->seq_decoding_params = (DecodingParams *) seq_dp;
 
