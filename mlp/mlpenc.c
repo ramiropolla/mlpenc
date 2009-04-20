@@ -787,8 +787,9 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
     put_bits(&pb,  4, ctx->coded_sample_fmt [1]);
     put_bits(&pb,  4, ctx->coded_sample_rate[0]);
     put_bits(&pb,  4, ctx->coded_sample_rate[1]);
-    put_bits(&pb, 11, 0                    ); /* This value is 0 in all tested
-                                               * MLP samples. */
+    put_bits(&pb,  4, 0                        ); /* ignored */
+    put_bits(&pb,  4, 0                        ); /* multi_channel_type */
+    put_bits(&pb,  3, 0                        ); /* ignored */
     put_bits(&pb,  5, ctx->channel_arrangement);
 
     /* These values seem to be constant for all tested MLP samples. */
