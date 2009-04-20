@@ -616,7 +616,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 
     ff_mlp_init_crc();
 
-    /* TODO mlp_channels is more complex, but for now
+    /* TODO channel_arrangement is more complex, but for now
      * we only accept mono and stereo. */
     ctx->channel_arrangement = avctx->channels - 1;
     ctx->num_substreams = 1;
