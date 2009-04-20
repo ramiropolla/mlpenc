@@ -1,63 +1,122 @@
-Index: Changelog
+Index: libavcodec/lpc.c
 ===================================================================
---- Changelog	(revision 15277)
-+++ Changelog	(working copy)
-@@ -136,6 +136,7 @@
- - MXF muxer
- - E-AC-3 support added to AC-3 decoder
- - Nellymoser ASAO encoder
-+- MLP/TrueHD encoder
+--- libavcodec/lpc.c	(revision 18631)
++++ libavcodec/lpc.c	(working copy)
+@@ -30,7 +30,7 @@
+  * Quantize LPC coefficients
+  */
+ static void quantize_lpc_coefs(double *lpc_in, int order, int precision,
+-                               int32_t *lpc_out, int *shift, int max_shift, int zero_shift)
++                               int32_t *lpc_out, int *shift, int min_shift, int max_shift, int zero_shift)
+ {
+     int i;
+     double cmax, error;
+@@ -55,7 +55,7 @@
  
- version 0.4.9-pre1:
+     /* calculate level shift which scales max coeff to available bits */
+     sh = max_shift;
+-    while((cmax * (1 << sh) > qmax) && (sh > 0)) {
++    while((cmax * (1 << sh) > qmax) && (sh > min_shift)) {
+         sh--;
+     }
  
-Index: doc/general.texi
+@@ -104,7 +104,7 @@
+                       const int32_t *samples, int blocksize, int min_order,
+                       int max_order, int precision,
+                       int32_t coefs[][MAX_LPC_ORDER], int *shift, int use_lpc,
+-                      int omethod, int max_shift, int zero_shift)
++                      int omethod, int min_shift, int max_shift, int zero_shift)
+ {
+     double autoc[MAX_LPC_ORDER+1];
+     double ref[MAX_LPC_ORDER];
+@@ -163,10 +163,10 @@
+     if(omethod == ORDER_METHOD_EST) {
+         opt_order = estimate_best_order(ref, min_order, max_order);
+         i = opt_order-1;
+-        quantize_lpc_coefs(lpc[i], i+1, precision, coefs[i], &shift[i], max_shift, zero_shift);
++        quantize_lpc_coefs(lpc[i], i+1, precision, coefs[i], &shift[i], min_shift, max_shift, zero_shift);
+     } else {
+         for(i=min_order-1; i<max_order; i++) {
+-            quantize_lpc_coefs(lpc[i], i+1, precision, coefs[i], &shift[i], max_shift, zero_shift);
++            quantize_lpc_coefs(lpc[i], i+1, precision, coefs[i], &shift[i], min_shift, max_shift, zero_shift);
+         }
+     }
+ 
+Index: libavcodec/lpc.h
 ===================================================================
---- doc/general.texi	(revision 15277)
-+++ doc/general.texi	(working copy)
-@@ -378,7 +378,7 @@
- @item MAXIS EA ADPCM         @tab     @tab  X
-     @tab Used in Sim City 3000.
- @item Microsoft ADPCM        @tab  X  @tab  X
--@item MLP/TrueHD             @tab     @tab  X
-+@item MLP/TrueHD             @tab  X  @tab  X
-     @tab Used in DVD-Audio and Blu-Ray discs.
- @item Monkey's Audio         @tab     @tab  X
-     @tab Only versions 3.97-3.99 are supported.
+--- libavcodec/lpc.h	(revision 18631)
++++ libavcodec/lpc.h	(working copy)
+@@ -43,7 +43,7 @@
+                       const int32_t *samples, int blocksize, int min_order,
+                       int max_order, int precision,
+                       int32_t coefs[][MAX_LPC_ORDER], int *shift, int use_lpc,
+-                      int omethod, int max_shift, int zero_shift);
++                      int omethod, int min_shift, int max_shift, int zero_shift);
+ 
+ #ifdef LPC_USE_DOUBLE
+ #define LPC_TYPE double
 Index: libavcodec/Makefile
 ===================================================================
---- libavcodec/Makefile	(revision 15277)
+--- libavcodec/Makefile	(revision 18631)
 +++ libavcodec/Makefile	(working copy)
-@@ -113,6 +113,7 @@
+@@ -126,6 +126,7 @@
  OBJS-$(CONFIG_MJPEG_ENCODER)           += mjpegenc.o mjpeg.o mpegvideo_enc.o motion_est.o ratecontrol.o mpeg12data.o mpegvideo.o
  OBJS-$(CONFIG_MJPEGB_DECODER)          += mjpegbdec.o mjpegdec.o mjpeg.o
- OBJS-$(CONFIG_MLP_DECODER)             += mlp.o mlpdec.o
-+OBJS-$(CONFIG_MLP_ENCODER)             += mlpenc.o
+ OBJS-$(CONFIG_MLP_DECODER)             += mlpdec.o mlp_parser.o mlp.o
++OBJS-$(CONFIG_MLP_ENCODER)             += mlpenc.o mlp.o
  OBJS-$(CONFIG_MMVIDEO_DECODER)         += mmvideo.o
  OBJS-$(CONFIG_MOTIONPIXELS_DECODER)    += motionpixels.o
- OBJS-$(CONFIG_MP2_DECODER)             += mpegaudiodec.o mpegaudiodecheader.o mpegaudio.o mpegaudiodata.o
+ OBJS-$(CONFIG_MP1_DECODER)             += mpegaudiodec.o mpegaudiodecheader.o mpegaudio.o mpegaudiodata.o
+Index: libavcodec/mlp.h
+===================================================================
+--- libavcodec/mlp.h	(revision 18631)
++++ libavcodec/mlp.h	(working copy)
+@@ -67,6 +67,9 @@
+ 
+     int32_t     coeff[MAX_FIR_ORDER];
+     int32_t     state[MAX_FIR_ORDER];
++
++    int         coeff_bits;
++    int         coeff_shift;
+ } FilterParams;
+ 
+ /** sample data coding information */
+Index: libavcodec/flacenc.c
+===================================================================
+--- libavcodec/flacenc.c	(revision 18631)
++++ libavcodec/flacenc.c	(working copy)
+@@ -844,7 +844,7 @@
+     /* LPC */
+     opt_order = ff_lpc_calc_coefs(&ctx->dsp, smp, n, min_order, max_order,
+                                   precision, coefs, shift, ctx->options.use_lpc,
+-                                  omethod, MAX_LPC_SHIFT, 0);
++                                  omethod, 0, MAX_LPC_SHIFT, 0);
+ 
+     if(omethod == ORDER_METHOD_2LEVEL ||
+        omethod == ORDER_METHOD_4LEVEL ||
 Index: libavcodec/allcodecs.c
 ===================================================================
---- libavcodec/allcodecs.c	(revision 15277)
+--- libavcodec/allcodecs.c	(revision 18631)
 +++ libavcodec/allcodecs.c	(working copy)
-@@ -194,7 +194,7 @@
+@@ -203,7 +203,7 @@
      REGISTER_DECODER (IMC, imc);
      REGISTER_DECODER (MACE3, mace3);
      REGISTER_DECODER (MACE6, mace6);
 -    REGISTER_DECODER (MLP, mlp);
 +    REGISTER_ENCDEC  (MLP, mlp);
+     REGISTER_DECODER (MP1, mp1);
      REGISTER_ENCDEC  (MP2, mp2);
      REGISTER_DECODER (MP3, mp3);
-     REGISTER_DECODER (MP3ADU, mp3adu);
-Index: libavcodec/avcodec.h
+Index: libavcodec/alacenc.c
 ===================================================================
---- libavcodec/avcodec.h	(revision 15277)
-+++ libavcodec/avcodec.h	(working copy)
-@@ -30,7 +30,7 @@
- #include "libavutil/avutil.h"
+--- libavcodec/alacenc.c	(revision 18631)
++++ libavcodec/alacenc.c	(working copy)
+@@ -133,7 +133,7 @@
+     int opt_order;
  
- #define LIBAVCODEC_VERSION_MAJOR 52
--#define LIBAVCODEC_VERSION_MINOR  0
-+#define LIBAVCODEC_VERSION_MINOR  1
- #define LIBAVCODEC_VERSION_MICRO  0
+     opt_order = ff_lpc_calc_coefs(&s->dspctx, s->sample_buf[ch], s->avctx->frame_size, s->min_prediction_order, s->max_prediction_order,
+-                                   ALAC_MAX_LPC_PRECISION, coefs, shift, 1, ORDER_METHOD_EST, ALAC_MAX_LPC_SHIFT, 1);
++                                   ALAC_MAX_LPC_PRECISION, coefs, shift, 1, ORDER_METHOD_EST, 0, ALAC_MAX_LPC_SHIFT, 1);
  
- #define LIBAVCODEC_VERSION_INT  AV_VERSION_INT(LIBAVCODEC_VERSION_MAJOR, \
+     s->lpc[ch].lpc_order = opt_order;
+     s->lpc[ch].lpc_quant = shift[opt_order-1];

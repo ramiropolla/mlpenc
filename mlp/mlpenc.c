@@ -20,7 +20,7 @@
  */
 
 #include "avcodec.h"
-#include "bitstream.h"
+#include "put_bits.h"
 #include "libavutil/crc.h"
 #include "libavutil/avstring.h"
 #include "mlp.h"
@@ -565,7 +565,6 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     }
 
     ff_mlp_init_crc();
-    ff_mlp_init_crc2D(NULL);
 
     /* TODO mlp_channels is more complex, but for now
      * we only accept mono and stereo. */

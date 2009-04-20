@@ -1,20 +1,20 @@
 Index: libavformat/Makefile
 ===================================================================
---- libavformat/Makefile	(revision 15277)
+--- libavformat/Makefile	(revision 18631)
 +++ libavformat/Makefile	(working copy)
-@@ -83,6 +83,7 @@
+@@ -89,6 +89,7 @@
  OBJS-$(CONFIG_MJPEG_DEMUXER)             += raw.o
  OBJS-$(CONFIG_MJPEG_MUXER)               += raw.o
- OBJS-$(CONFIG_MLP_DEMUXER)               += raw.o
+ OBJS-$(CONFIG_MLP_DEMUXER)               += raw.o id3v2.o
 +OBJS-$(CONFIG_MLP_MUXER)                 += raw.o
  OBJS-$(CONFIG_MM_DEMUXER)                += mm.o
  OBJS-$(CONFIG_MMF_DEMUXER)               += mmf.o raw.o
  OBJS-$(CONFIG_MMF_MUXER)                 += mmf.o riff.o
 Index: libavformat/raw.c
 ===================================================================
---- libavformat/raw.c	(revision 15277)
+--- libavformat/raw.c	(revision 18631)
 +++ libavformat/raw.c	(working copy)
-@@ -896,6 +896,21 @@
+@@ -973,6 +973,21 @@
  };
  #endif
  
@@ -33,12 +33,12 @@ Index: libavformat/raw.c
 +};
 +#endif
 +
- #ifdef CONFIG_MPEG1VIDEO_MUXER
- AVOutputFormat mpeg1video_muxer = {
-     "mpeg1video",
+ #if CONFIG_TRUEHD_DEMUXER
+ AVInputFormat truehd_demuxer = {
+     "truehd",
 Index: libavformat/allformats.c
 ===================================================================
---- libavformat/allformats.c	(revision 15277)
+--- libavformat/allformats.c	(revision 18631)
 +++ libavformat/allformats.c	(working copy)
 @@ -102,7 +102,7 @@
      REGISTER_MUXDEMUX (MATROSKA, matroska);
