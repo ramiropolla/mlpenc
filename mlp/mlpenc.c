@@ -115,6 +115,9 @@ typedef struct {
 
     int32_t        *lpc_sample_buffer;
 
+    unsigned int    major_number_of_frames;
+    unsigned int    next_major_number_of_frames;
+
     unsigned int    major_frame_size;       ///< Number of samples in current major frame being encoded.
     unsigned int    next_major_frame_size;  ///< Counter of number of samples for next major frame.
 
@@ -2177,7 +2180,7 @@ static void process_major_frame(MLPEncodeContext *ctx)
     ctx->sample_buffer = ctx->major_inout_buffer;
 
     ctx->starting_frame_index = 0;
-    ctx->number_of_frames = MAJOR_HEADER_INTERVAL;
+    ctx->number_of_frames = ctx->major_number_of_frames;
     ctx->number_of_samples = ctx->major_frame_size;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
@@ -2264,6 +2267,7 @@ input_and_return:
     if (data) {
         ctx->frame_size[ctx->frame_index] = avctx->frame_size;
         ctx->next_major_frame_size += avctx->frame_size;
+        ctx->next_major_number_of_frames++;
         input_data(ctx, data);
     } else if (!ctx->last_frame) {
         ctx->last_frame = ctx->inout_buffer;
@@ -2292,8 +2296,8 @@ input_and_return:
 
         ctx->starting_frame_index = (ctx->avctx->frame_number - (ctx->avctx->frame_number % ctx->min_restart_interval)
                                   - (seq_index * ctx->min_restart_interval)) % ctx->max_restart_interval;
-        ctx->number_of_frames = ctx->seq_size[seq_index] - 1;
-        ctx->number_of_subblocks = ctx->seq_size[seq_index];
+        ctx->number_of_frames = ctx->next_major_number_of_frames;
+        ctx->number_of_subblocks = ctx->next_major_number_of_frames + 1;
         ctx->seq_channel_params = (ChannelParams *) seq_cp;
         ctx->seq_decoding_params = (DecodingParams *) seq_dp;
 
@@ -2315,6 +2319,8 @@ input_and_return:
     if (ctx->frame_index == (ctx->max_restart_interval - 1)) {
         ctx->major_frame_size = ctx->next_major_frame_size;
         ctx->next_major_frame_size = 0;
+        ctx->major_number_of_frames = ctx->next_major_number_of_frames;
+        ctx->next_major_number_of_frames = 0;
 
         if (!ctx->major_frame_size)
             goto no_data_left;
