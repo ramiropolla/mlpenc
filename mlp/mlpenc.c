@@ -1750,13 +1750,14 @@ static void determine_bits(MLPEncodeContext *ctx)
         }
         average /= dp->blocksize;
 
-        if (!cp->filter_params[FIR].order)
-        no_codebook_bits(ctx, channel, min, max, &ctx->cur_best_offset[channel][0]);
-        else
+        if (!cp->filter_params[FIR].order) {
+            no_codebook_bits(ctx, channel, min, max, &ctx->cur_best_offset[channel][0]);
+        } else {
             no_codebook_bits_offset(ctx, channel, offset, min, max, &ctx->cur_best_offset[channel][0]);
+        }
 
         if (!cp->filter_params[FIR].order)
-        offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
+            offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
 
         for (i = 1; i < NUM_CODEBOOKS; i++) {
             BestOffset temp_bo = { 0, INT_MAX, 0, 0, 0, };
@@ -1767,12 +1768,12 @@ static void determine_bits(MLPEncodeContext *ctx)
                                  &temp_bo);
 
             if (!cp->filter_params[FIR].order) {
-            offset_max = temp_bo.max;
+                offset_max = temp_bo.max;
 
-            codebook_bits(ctx, channel, i - 1, temp_bo.min - 1,
-                          min, max, &temp_bo, 0);
-            codebook_bits(ctx, channel, i - 1, offset_max + 1,
-                          min, max, &temp_bo, 1);
+                codebook_bits(ctx, channel, i - 1, temp_bo.min - 1,
+                            min, max, &temp_bo, 0);
+                codebook_bits(ctx, channel, i - 1, offset_max + 1,
+                            min, max, &temp_bo, 1);
             }
 
             ctx->cur_best_offset[channel][i] = temp_bo;
