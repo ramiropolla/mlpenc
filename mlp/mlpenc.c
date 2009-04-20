@@ -1052,6 +1052,7 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         unsigned int subblock, num_subblocks = restart_frame;
         RestartHeader  *rh = &ctx->restart_header [substr];
+        int substr_restart_frame = restart_frame;
         uint8_t parity, checksum;
         PutBitContext pb, tmpb;
         int params_changed;
@@ -1070,10 +1071,10 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
             params_changed = ctx->major_params_changed[subblock_index][substr];
 
-            if (restart_frame || params_changed) {
+            if (substr_restart_frame || params_changed) {
                 put_bits(&pb, 1, 1);
 
-                if (restart_frame) {
+                if (substr_restart_frame) {
                     put_bits(&pb, 1, 1);
 
                     write_restart_header(ctx, &pb);
@@ -1089,10 +1090,9 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
 
             write_block_data(ctx, &pb);
 
-            put_bits(&pb, 1, !restart_frame);
+            put_bits(&pb, 1, !substr_restart_frame);
 
-            if (restart_frame)
-                restart_frame = 0;
+            substr_restart_frame = 0;
         }
 
         put_bits(&pb, (-put_bits_count(&pb)) & 15, 0);
