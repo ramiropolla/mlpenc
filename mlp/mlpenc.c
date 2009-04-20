@@ -1311,7 +1311,7 @@ static int number_trailing_zeroes(int32_t sample)
 }
 
 /** Determines how many bits are zero at the end of all samples so they can be
- *  shifted out for the huffman coder.
+ *  shifted out.
  */
 static void determine_quant_step_size(MLPEncodeContext *ctx)
 {
@@ -2138,10 +2138,10 @@ static void analyze_sample_buffer(MLPEncodeContext *ctx)
         ctx->cur_decoding_params = &seq_dp[1][substr];
         ctx->cur_channel_params = seq_cp[1];
 
+        determine_quant_step_size(ctx);
         generate_2_noise_channels(ctx);
         lossless_matrix_coeffs   (ctx);
         rematrix_channels        (ctx);
-        determine_quant_step_size(ctx);
         determine_filters        (ctx);
         apply_filters            (ctx);
 
