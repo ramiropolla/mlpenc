@@ -190,6 +190,7 @@ static DecodingParams  restart_decoding_params[MAX_SUBSTREAMS];
 static BestOffset      restart_best_offset[NUM_CODEBOOKS] = {{0}};
 
 #define SYNC_MAJOR      0xf8726f
+#define MAJOR_SYNC_INFO_SIGNATURE   0xB752
 
 #define SYNC_MLP        0xbb
 #define SYNC_TRUEHD     0xba
@@ -793,7 +794,7 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
     put_bits(&pb,  5, ctx->channel_arrangement);
 
     /* These values seem to be constant for all tested MLP samples. */
-    put_bits(&pb, 16, 0xb752);
+    put_bits(&pb, 16, MAJOR_SYNC_INFO_SIGNATURE);
     put_bits(&pb, 16, 0x4000);
     put_bits(&pb, 16, 0x0000);
 
