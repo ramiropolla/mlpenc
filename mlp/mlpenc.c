@@ -78,6 +78,7 @@ typedef struct {
 #define PARAM_FIR           (1 << 3)
 #define PARAM_IIR           (1 << 2)
 #define PARAM_HUFFOFFSET    (1 << 1)
+#define PARAM_PRESENT       (1 << 0)
 
 } DecodingParams;
 
@@ -435,6 +436,7 @@ static void default_decoding_params(MLPEncodeContext *ctx,
         param_presence_flags |= PARAM_FIR;
 /*      param_presence_flags |= PARAM_IIR; */
         param_presence_flags |= PARAM_HUFFOFFSET;
+        param_presence_flags |= PARAM_PRESENT;
 
         dp->param_presence_flags = param_presence_flags;
     }
