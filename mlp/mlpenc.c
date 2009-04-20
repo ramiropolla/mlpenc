@@ -110,6 +110,13 @@ typedef struct {
 
     int             flags;                  ///< major sync info flags
 
+    /* channel_meaning */
+    int             substream_info;
+    int             fs;
+    int             wordlength;
+    int             channel_occupancy;
+    int             summary_info;
+
     int32_t        *inout_buffer;           ///< Pointer to data currently being read from lavc or written to bitstream.
     int32_t        *major_inout_buffer;     ///< Buffer with all in/out data for one entire major frame interval.
     int32_t        *write_buffer;           ///< Pointer to data currently being written to bitstream.
@@ -141,10 +148,6 @@ typedef struct {
     uint16_t        dts;                    ///< Decoding timestamp of current access unit.
 
     uint8_t         channel_arrangement;    ///< channel arrangement for MLP streams
-
-    uint8_t         mlp_channels2;          ///< 1 bit for each channel
-    uint8_t         mlp_channels3;  /**< TODO unknown channel-related field
-                                     *   These values are correct for mono and stereo. */
 
     unsigned int    seq_size  [MAJOR_HEADER_INTERVAL];
     unsigned int    seq_offset[MAJOR_HEADER_INTERVAL];
@@ -202,6 +205,11 @@ static BestOffset      restart_best_offset[NUM_CODEBOOKS] = {{0}};
 #define FLAGS_DVDA      0x4000
 /* FIFO delay must be constant */
 #define FLAGS_CONST     0x8000
+
+#define SUBSTREAM_INFO_MAX_2_CHAN   0x01
+#define SUBSTREAM_INFO_HIGH_RATE    0x02
+#define SUBSTREAM_INFO_ALWAYS_SET   0x04
+#define SUBSTREAM_INFO_2_SUBSTREAMS 0x08
 
 /****************************************************************************
  ************ Functions that copy, clear, or compare parameters *************
@@ -455,21 +463,6 @@ static int inline number_sbits(int number)
     return av_log2(FFABS(number)) + 1 + !!number;
 }
 
-/** Encodes the third type of channel information for the sync headers.
- *  TODO This field is not yet fully understood. These values are just copied
- *       from some samples out in the wild.
- */
-static uint8_t get_channels3_code(int channels)
-{
-    switch (channels) {
-    case 1: return 0x1f;
-    case 2: return 0x1b;
-    case 6: return 0x00;
-    default:
-        return 0x1b;
-    }
-}
-
 enum InputBitDepth {
     BITS_16,
     BITS_20,
@@ -479,21 +472,6 @@ enum InputBitDepth {
 static int mlp_peak_bitrate(int peak_bitrate, int sample_rate)
 {
     return ((peak_bitrate << 4) - 8) / sample_rate;
-}
-
-/** Returns the coded sample_rate for MLP. */
-static int mlp_sample_rate(int sample_rate)
-{
-    switch (sample_rate) {
-    case 44100 << 0: return 0x8 + 0;
-    case 44100 << 1: return 0x8 + 1;
-    case 44100 << 2: return 0x8 + 2;
-    case 48000 << 0: return 0x0 + 0;
-    case 48000 << 1: return 0x0 + 1;
-    case 48000 << 2: return 0x0 + 2;
-    default:
-        return -1;
-    }
 }
 
 static av_cold int mlp_encode_init(AVCodecContext *avctx)
@@ -514,8 +492,40 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 
     ctx->avctx = avctx;
 
-    ctx->coded_sample_rate[0] = mlp_sample_rate(avctx->sample_rate);
-    if (ctx->coded_sample_rate[0] < 0) {
+    switch (avctx->sample_rate) {
+    case 44100 << 0:
+        avctx->frame_size         = 40  << 0;
+        ctx->coded_sample_rate[0] = 0x08 + 0;
+        ctx->fs                   = 0x08 + 1;
+        break;
+    case 44100 << 1:
+        avctx->frame_size         = 40  << 1;
+        ctx->coded_sample_rate[0] = 0x08 + 1;
+        ctx->fs                   = 0x0C + 1;
+        break;
+    case 44100 << 2:
+        ctx->substream_info      |= SUBSTREAM_INFO_HIGH_RATE;
+        avctx->frame_size         = 40  << 2;
+        ctx->coded_sample_rate[0] = 0x08 + 2;
+        ctx->fs                   = 0x10 + 1;
+        break;
+    case 48000 << 0:
+        avctx->frame_size         = 40  << 0;
+        ctx->coded_sample_rate[0] = 0x00 + 0;
+        ctx->fs                   = 0x08 + 2;
+        break;
+    case 48000 << 1:
+        avctx->frame_size         = 40  << 1;
+        ctx->coded_sample_rate[0] = 0x00 + 1;
+        ctx->fs                   = 0x0C + 2;
+        break;
+    case 48000 << 2:
+        ctx->substream_info      |= SUBSTREAM_INFO_HIGH_RATE;
+        avctx->frame_size         = 40  << 2;
+        ctx->coded_sample_rate[0] = 0x00 + 2;
+        ctx->fs                   = 0x10 + 2;
+        break;
+    default:
         av_log(avctx, AV_LOG_ERROR, "Unsupported sample rate %d. Supported "
                             "sample rates are 44100, 88200, 176400, 48000, "
                             "96000, and 192000.\n", avctx->sample_rate);
@@ -533,10 +543,20 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         return -1;
     }
 
+    if (avctx->channels <= 2) {
+        ctx->substream_info |= SUBSTREAM_INFO_MAX_2_CHAN;
+    }
+
     switch (avctx->sample_fmt) {
-    case SAMPLE_FMT_S16: ctx->coded_sample_fmt[0] = BITS_16; break;
+    case SAMPLE_FMT_S16:
+        ctx->coded_sample_fmt[0] = BITS_16;
+        ctx->wordlength = 16;
+        break;
     /* TODO 20 bits: */
-    case SAMPLE_FMT_S32: ctx->coded_sample_fmt[0] = BITS_24; break;
+    case SAMPLE_FMT_S32:
+        ctx->coded_sample_fmt[0] = BITS_24;
+        ctx->wordlength = 24;
+        break;
     default:
         av_log(avctx, AV_LOG_ERROR, "Sample format not supported. "
                "Only 16- and 24-bit samples are supported.\n");
@@ -544,7 +564,6 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     }
     ctx->coded_sample_fmt[1] = -1 & 0xf;
 
-    avctx->frame_size  = 40 << (ctx->coded_sample_rate[0] & 0x7);
     avctx->coded_frame = avcodec_alloc_frame();
 
     ctx->dts = -avctx->frame_size;
@@ -600,10 +619,10 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     /* TODO mlp_channels is more complex, but for now
      * we only accept mono and stereo. */
     ctx->channel_arrangement = avctx->channels - 1;
-    ctx->mlp_channels2  = (1 << avctx->channels) - 1;
-    ctx->mlp_channels3  = get_channels3_code(avctx->channels);
     ctx->num_substreams = 1;
     ctx->flags = FLAGS_DVDA;
+    ctx->channel_occupancy = ff_mlp_ch_info[avctx->channels - 1].channel_occupancy;
+    ctx->summary_info      = ff_mlp_ch_info[avctx->channels - 1].summary_info     ;
 
     size = sizeof(unsigned int) * ctx->max_restart_interval;
 
@@ -813,15 +832,20 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
     put_bits(&pb, 15, ctx->coded_peak_bitrate);
     put_bits(&pb,  4, 1); /* TODO Support more num_substreams. */
 
-    put_bits(&pb, 20, 0x1054c); /* TODO These values have something to do with
-                                 * the sample rate. The ones used here come
-                                 * from samples that are stereo and have
-                                 * 44100Hz. */
-    put_bits(&pb,  8, ctx->mlp_channels2);
-    put_bits(&pb, 16, 0x0000);
-    put_bits(&pb, 16, 0x8080); /* These values seem */
-    put_bits(&pb,  8, 0x00              ); /* to be constants.  */
-    put_bits(&pb,  8, ctx->mlp_channels3); /* TODO Finish understanding this field. */
+    put_bits(&pb,  4, 0x1                   ); /* ignored */
+
+    /* channel_meaning */
+    put_bits(&pb,  8, ctx->substream_info   );
+    put_bits(&pb,  5, ctx->fs               );
+    put_bits(&pb,  5, ctx->wordlength       );
+    put_bits(&pb,  6, ctx->channel_occupancy);
+    put_bits(&pb,  3, 0                     ); /* ignored */
+    put_bits(&pb, 10, 0                     ); /* speaker_layout */
+    put_bits(&pb,  3, 0                     ); /* copy_protection */
+    put_bits(&pb, 16, 0x8080                ); /* ignored */
+    put_bits(&pb,  7, 0                     ); /* ignored */
+    put_bits(&pb,  4, 0                     ); /* source_format */
+    put_bits(&pb,  5, ctx->summary_info     );
 
     flush_put_bits(&pb);
 
@@ -1415,7 +1439,11 @@ static void set_filter_params(MLPEncodeContext *ctx,
     ChannelParams *cp = &ctx->cur_channel_params[channel];
     FilterParams *fp = &cp->filter_params[filter];
 
-    if (clear_filter || filter == IIR) {
+    if ((filter == IIR && ctx->substream_info & SUBSTREAM_INFO_HIGH_RATE) ||
+        clear_filter) {
+        fp->order = 0;
+    } else
+    if (filter == IIR) {
         fp->order = 0;
     } else
     if (filter == FIR) {
