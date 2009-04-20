@@ -543,6 +543,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
         return -1;
     }
 
+    ctx->substream_info |= SUBSTREAM_INFO_ALWAYS_SET;
     if (avctx->channels <= 2) {
         ctx->substream_info |= SUBSTREAM_INFO_MAX_2_CHAN;
     }
