@@ -1448,6 +1448,8 @@ static void set_filter_params(MLPEncodeContext *ctx,
         fp->order = 0;
     } else
     if (filter == FIR) {
+        const int max_order = (ctx->substream_info & SUBSTREAM_INFO_HIGH_RATE)
+                            ? 4 : MLP_MAX_LPC_ORDER;
         int32_t *sample_buffer = ctx->sample_buffer + channel;
         int32_t coefs[MAX_LPC_ORDER][MAX_LPC_ORDER];
         int32_t *lpc_samples = ctx->lpc_sample_buffer;
@@ -1461,7 +1463,7 @@ static void set_filter_params(MLPEncodeContext *ctx,
         }
 
         order = ff_lpc_calc_coefs(&ctx->dsp, ctx->lpc_sample_buffer, ctx->number_of_samples,
-                                  MLP_MIN_LPC_ORDER, MLP_MAX_LPC_ORDER, 11,
+                                  MLP_MIN_LPC_ORDER, max_order, 11,
                                   coefs, shift, 1,
                                   ORDER_METHOD_EST, MLP_MIN_LPC_SHIFT, MLP_MAX_LPC_SHIFT, MLP_MIN_LPC_SHIFT);
 
