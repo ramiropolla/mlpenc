@@ -1368,7 +1368,7 @@ static void code_filter_coeffs(MLPEncodeContext *ctx, FilterParams *fp)
 
     bits = FFMAX(number_sbits(min), number_sbits(max));
 
-    for (shift = 0; shift < 7 && !(coeff_mask & (1<<shift)); shift++);
+    for (shift = 0; shift < 7 && bits + shift < 16 && !(coeff_mask & (1<<shift)); shift++);
 
     fp->coeff_bits  = bits;
     fp->coeff_shift = shift;
