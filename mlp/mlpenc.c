@@ -432,6 +432,17 @@ static void default_decoding_params(MLPEncodeContext *ctx,
 
 /****************************************************************************/
 
+/** Calculates the smallest number of bits it takes to encode a given signed
+ *  value in two's complement.
+ */
+static int inline number_sbits(int number)
+{
+    if (number < 0)
+        number++;
+
+    return av_log2(FFABS(number)) + 1 + !!number;
+}
+
 /** Encodes the third type of channel information for the sync headers.
  *  TODO This field is not yet fully understood. These values are just copied
  *       from some samples out in the wild.
@@ -1334,17 +1345,6 @@ static void determine_quant_step_size(MLPEncodeContext *ctx)
 
     for (channel = 0; channel <= rh->max_channel; channel++)
         dp->quant_step_size[channel] = number_trailing_zeroes(sample_mask[channel]) - mp->shift[channel];
-}
-
-/** Calculates the smallest number of bits it takes to encode a given signed
- *  value in two's complement.
- */
-static int inline number_sbits(int number)
-{
-    if (number < 0)
-        number++;
-
-    return av_log2(FFABS(number)) + 1 + !!number;
 }
 
 /** Determines the smallest number of bits needed to encode the filter
