@@ -812,8 +812,8 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
 
     init_put_bits(&pb, buf, buf_size);
 
-    put_bits(&pb, 24, SYNC_MAJOR           );
-    put_bits(&pb,  8, SYNC_MLP             );
+    put_bits(&pb, 24, SYNC_MAJOR               );
+    put_bits(&pb,  8, SYNC_MLP                 );
     put_bits(&pb,  4, ctx->coded_sample_fmt [0]);
     put_bits(&pb,  4, ctx->coded_sample_fmt [1]);
     put_bits(&pb,  4, ctx->coded_sample_rate[0]);
@@ -821,32 +821,28 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
     put_bits(&pb,  4, 0                        ); /* ignored */
     put_bits(&pb,  4, 0                        ); /* multi_channel_type */
     put_bits(&pb,  3, 0                        ); /* ignored */
-    put_bits(&pb,  5, ctx->channel_arrangement);
+    put_bits(&pb,  5, ctx->channel_arrangement );
 
     put_bits(&pb, 16, MAJOR_SYNC_INFO_SIGNATURE);
     put_bits(&pb, 16, ctx->flags               );
     put_bits(&pb, 16, 0                        ); /* ignored */
-
-    put_bits(&pb,  1, 1); /* is_vbr: This value is 1 in all tested MLP samples.
-                           * I suppose it would be 0 only when no filters
-                           * or codebooks are used. */
-    put_bits(&pb, 15, ctx->coded_peak_bitrate);
-    put_bits(&pb,  4, 1); /* TODO Support more num_substreams. */
-
-    put_bits(&pb,  4, 0x1                   ); /* ignored */
+    put_bits(&pb,  1, 1                        ); /* is_vbr */
+    put_bits(&pb, 15, ctx->coded_peak_bitrate  );
+    put_bits(&pb,  4, 1                        ); /* num_substreams */
+    put_bits(&pb,  4, 0x1                      ); /* ignored */
 
     /* channel_meaning */
-    put_bits(&pb,  8, ctx->substream_info   );
-    put_bits(&pb,  5, ctx->fs               );
-    put_bits(&pb,  5, ctx->wordlength       );
-    put_bits(&pb,  6, ctx->channel_occupancy);
-    put_bits(&pb,  3, 0                     ); /* ignored */
-    put_bits(&pb, 10, 0                     ); /* speaker_layout */
-    put_bits(&pb,  3, 0                     ); /* copy_protection */
-    put_bits(&pb, 16, 0x8080                ); /* ignored */
-    put_bits(&pb,  7, 0                     ); /* ignored */
-    put_bits(&pb,  4, 0                     ); /* source_format */
-    put_bits(&pb,  5, ctx->summary_info     );
+    put_bits(&pb,  8, ctx->substream_info      );
+    put_bits(&pb,  5, ctx->fs                  );
+    put_bits(&pb,  5, ctx->wordlength          );
+    put_bits(&pb,  6, ctx->channel_occupancy   );
+    put_bits(&pb,  3, 0                        ); /* ignored */
+    put_bits(&pb, 10, 0                        ); /* speaker_layout */
+    put_bits(&pb,  3, 0                        ); /* copy_protection */
+    put_bits(&pb, 16, 0x8080                   ); /* ignored */
+    put_bits(&pb,  7, 0                        ); /* ignored */
+    put_bits(&pb,  4, 0                        ); /* source_format */
+    put_bits(&pb,  5, ctx->summary_info        );
 
     flush_put_bits(&pb);
 
@@ -873,7 +869,7 @@ static void write_restart_header(MLPEncodeContext *ctx, PutBitContext *pb)
     put_bits(pb,  4, rh->max_matrix_channel);
     put_bits(pb,  4, rh->noise_shift       );
     put_bits(pb, 23, rh->noisegen_seed     );
-    put_bits(pb,  4, 0                     ); /* TODO still unknown */
+    put_bits(pb,  4, 0                     ); /* TODO max_shift */
     put_bits(pb,  5, rh->max_huff_lsbs     );
     put_bits(pb,  5, rh->max_output_bits   );
     put_bits(pb,  5, rh->max_output_bits   );
@@ -907,7 +903,7 @@ static void write_matrix_params(MLPEncodeContext *ctx, PutBitContext *pb)
 
         put_bits(pb, 4, mp->outch[mat]); /* matrix_out_ch */
         put_bits(pb, 4, mp->fbits[mat]);
-        put_bits(pb, 1, 0                 ); /* lsb_bypass */
+        put_bits(pb, 1, 0             ); /* lsb_bypass */
 
         for (channel = 0; channel < ctx->num_channels; channel++) {
             int32_t coeff = mp->coeff[mat][channel];
@@ -936,7 +932,7 @@ static void write_filter_params(MLPEncodeContext *ctx, PutBitContext *pb,
     if (fp->order > 0) {
         int i;
 
-        put_bits(pb, 4, fp->shift  );
+        put_bits(pb, 4, fp->shift      );
         put_bits(pb, 5, fp->coeff_bits );
         put_bits(pb, 3, fp->coeff_shift);
 
