@@ -1737,6 +1737,7 @@ static void determine_bits(MLPEncodeContext *ctx)
         ChannelParams *cp = &ctx->cur_channel_params[channel];
         int32_t *sample_buffer = ctx->sample_buffer + channel;
         int32_t min = INT32_MAX, max = INT32_MIN;
+        int no_filters_used = !cp->filter_params[FIR].order;
         int average = 0;
         int offset = 0;
         int i;
@@ -1753,7 +1754,9 @@ static void determine_bits(MLPEncodeContext *ctx)
         }
         average /= dp->blocksize;
 
-        if (!cp->filter_params[FIR].order) {
+        /* If filtering is used, we always set the offset to zero, otherwise
+         * we search for the offset that minimizes the bitcount. */
+        if (no_filters_used) {
             no_codebook_bits(ctx, channel, min, max, &ctx->cur_best_offset[channel][0]);
             offset = av_clip(average, HUFF_OFFSET_MIN, HUFF_OFFSET_MAX);
         } else {
@@ -1768,7 +1771,7 @@ static void determine_bits(MLPEncodeContext *ctx)
                                  min, max, offset,
                                  &temp_bo);
 
-            if (!cp->filter_params[FIR].order) {
+            if (no_filters_used) {
                 offset_max = temp_bo.max;
 
                 codebook_bits(ctx, channel, i - 1, temp_bo.min - 1,
