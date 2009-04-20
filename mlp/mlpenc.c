@@ -1061,11 +1061,14 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
         init_put_bits(&pb, buf, buf_size);
 
         for (subblock = 0; subblock <= num_subblocks; subblock++) {
+            unsigned int subblock_index;
 
-            ctx->cur_decoding_params = &ctx->major_decoding_params[ctx->frame_index + 1 - num_subblocks + subblock][substr];
-            ctx->cur_channel_params = ctx->major_channel_params[ctx->frame_index + 1 - num_subblocks + subblock];
+            subblock_index = ctx->frame_index + 1 - num_subblocks + subblock;
 
-            params_changed = ctx->major_params_changed[ctx->frame_index + 1 - num_subblocks + subblock][substr];
+            ctx->cur_decoding_params = &ctx->major_decoding_params[subblock_index][substr];
+            ctx->cur_channel_params = ctx->major_channel_params[subblock_index];
+
+            params_changed = ctx->major_params_changed[subblock_index][substr];
 
             if (restart_frame || params_changed) {
                 put_bits(&pb, 1, 1);
