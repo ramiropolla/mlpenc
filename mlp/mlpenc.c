@@ -137,7 +137,7 @@ typedef struct {
     uint16_t        timestamp;              ///< Timestamp of current access unit.
     uint16_t        dts;                    ///< Decoding timestamp of current access unit.
 
-    uint8_t         mlp_channels;           ///< channel arrangement for MLP streams
+    uint8_t         channel_arrangement;    ///< channel arrangement for MLP streams
 
     uint8_t         mlp_channels2;          ///< 1 bit for each channel
     uint8_t         mlp_channels3;  /**< TODO unknown channel-related field
@@ -589,7 +589,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
 
     /* TODO mlp_channels is more complex, but for now
      * we only accept mono and stereo. */
-    ctx->mlp_channels   = avctx->channels - 1;
+    ctx->channel_arrangement = avctx->channels - 1;
     ctx->mlp_channels2  = (1 << avctx->channels) - 1;
     ctx->mlp_channels3  = get_channels3_code(avctx->channels);
     ctx->num_substreams = 1;
@@ -789,7 +789,7 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
     put_bits(&pb,  4, ctx->coded_sample_rate[1]);
     put_bits(&pb, 11, 0                    ); /* This value is 0 in all tested
                                                * MLP samples. */
-    put_bits(&pb,  5, ctx->mlp_channels);
+    put_bits(&pb,  5, ctx->channel_arrangement);
 
     /* These values seem to be constant for all tested MLP samples. */
     put_bits(&pb, 16, 0xb752);
