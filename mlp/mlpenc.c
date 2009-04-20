@@ -1087,9 +1087,6 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
                 put_bits(&pb, 1, 0);
             }
 
-            if (!restart_frame)
-                rh->lossless_check_data ^= *lossless_check_data++;
-
             write_block_data(ctx, &pb);
 
             put_bits(&pb, 1, !restart_frame);
@@ -1099,6 +1096,8 @@ static uint8_t *write_substrs(MLPEncodeContext *ctx, uint8_t *buf, int buf_size,
         }
 
         put_bits(&pb, (-put_bits_count(&pb)) & 15, 0);
+
+        rh->lossless_check_data ^= *lossless_check_data++;
 
         if (ctx->last_frame == ctx->inout_buffer) {
             /* TODO find a sample and implement shorten_by. */
