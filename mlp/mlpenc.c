@@ -107,6 +107,8 @@ typedef struct {
     int             coded_sample_rate[2];   ///< sample rate encoded for MLP
     int             coded_peak_bitrate;     ///< peak bitrate for this major sync header
 
+    int             flags;                  ///< major sync info flags
+
     int32_t        *inout_buffer;           ///< Pointer to data currently being read from lavc or written to bitstream.
     int32_t        *major_inout_buffer;     ///< Buffer with all in/out data for one entire major frame interval.
     int32_t        *write_buffer;           ///< Pointer to data currently being written to bitstream.
@@ -194,6 +196,11 @@ static BestOffset      restart_best_offset[NUM_CODEBOOKS] = {{0}};
 
 #define SYNC_MLP        0xbb
 #define SYNC_TRUEHD     0xba
+
+/* must be set for DVD-A */
+#define FLAGS_DVDA      0x4000
+/* FIFO delay must be constant */
+#define FLAGS_CONST     0x8000
 
 /****************************************************************************
  ************ Functions that copy, clear, or compare parameters *************
@@ -594,6 +601,7 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     ctx->mlp_channels2  = (1 << avctx->channels) - 1;
     ctx->mlp_channels3  = get_channels3_code(avctx->channels);
     ctx->num_substreams = 1;
+    ctx->flags = FLAGS_DVDA;
 
     size = sizeof(unsigned int) * ctx->max_restart_interval;
 
@@ -795,7 +803,7 @@ static void write_major_sync(MLPEncodeContext *ctx, uint8_t *buf, int buf_size)
 
     /* These values seem to be constant for all tested MLP samples. */
     put_bits(&pb, 16, MAJOR_SYNC_INFO_SIGNATURE);
-    put_bits(&pb, 16, 0x4000);
+    put_bits(&pb, 16, ctx->flags               );
     put_bits(&pb, 16, 0x0000);
 
     put_bits(&pb,  1, 1); /* is_vbr: This value is 1 in all tested MLP samples.
