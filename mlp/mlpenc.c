@@ -879,7 +879,7 @@ static void write_restart_header(MLPEncodeContext *ctx, PutBitContext *pb)
     put_bits(pb,  5, rh->max_output_bits   );
     put_bits(pb,  1, rh->data_check_present);
     put_bits(pb,  8, lossless_check        );
-    put_bits(pb, 16, 0                     ); /* This is zero =) */
+    put_bits(pb, 16, 0                     ); /* ignored */
 
     for (ch = 0; ch <= rh->max_matrix_channel; ch++)
         put_bits(pb, 6, ch);
