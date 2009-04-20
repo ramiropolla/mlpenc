@@ -47,6 +47,7 @@ typedef struct {
     int32_t         lossless_check_data; ///< XOR of all output samples
 
     uint8_t         max_huff_lsbs;       ///< largest huff_lsbs
+    uint8_t         max_output_bits;     ///< largest output bit-depth
 } RestartHeader;
 
 typedef struct {
@@ -123,6 +124,7 @@ typedef struct {
 
     int32_t        *lossless_check_data;    ///< Array with lossless_check_data for each access unit.
 
+    unsigned int   *max_output_bits;        ///< largest output bit-depth
     unsigned int   *frame_size;             ///< Array with number of samples/channel in each access unit.
     unsigned int    frame_index;            ///< Index of current frame being encoded.
 
@@ -598,6 +600,10 @@ static av_cold int mlp_encode_init(AVCodecContext *avctx)
     if (!ctx->frame_size)
         return -1;
 
+    ctx->max_output_bits = av_malloc(size);
+    if (!ctx->max_output_bits)
+        return -1;
+
     size = sizeof(int32_t)
          * ctx->num_substreams * ctx->max_restart_interval;
 
@@ -833,7 +839,8 @@ static void write_restart_header(MLPEncodeContext *ctx, PutBitContext *pb)
     put_bits(pb, 23, rh->noisegen_seed     );
     put_bits(pb,  4, 0                     ); /* TODO still unknown */
     put_bits(pb,  5, rh->max_huff_lsbs     );
-    put_bits(pb, 10, 0                     ); /* TODO still unknown */
+    put_bits(pb,  5, rh->max_output_bits   );
+    put_bits(pb,  5, rh->max_output_bits   );
     put_bits(pb,  1, rh->data_check_present);
     put_bits(pb,  8, lossless_check        );
     put_bits(pb, 16, 0                     ); /* This is zero =) */
@@ -1253,15 +1260,22 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
         RestartHeader  *rh = &ctx->restart_header [substr];
         int32_t *sample_buffer = ctx->inout_buffer;
         int32_t temp_lossless_check_data = 0;
+        uint32_t greatest = 0;
         unsigned int channel;
         int i;
 
         for (i = 0; i < ctx->frame_size[ctx->frame_index]; i++) {
             for (channel = 0; channel <= rh->max_channel; channel++) {
+                uint32_t abs_sample;
                 int32_t sample;
 
                 if (is24) sample = *samples_32++ >> 8;
                 else      sample = *samples_16++ << 8;
+
+                /* TODO Find out if number_sbits can be used for negative values. */
+                abs_sample = FFABS(sample);
+                if (greatest < abs_sample)
+                    greatest = abs_sample;
 
                 temp_lossless_check_data ^= (sample & 0x00ffffff) << channel;
                 *sample_buffer++ = sample;
@@ -1269,6 +1283,8 @@ static void input_data_internal(MLPEncodeContext *ctx, const uint8_t *samples,
 
             sample_buffer += 2; /* noise channels */
         }
+
+        ctx->max_output_bits[ctx->frame_index] = number_sbits(greatest);
 
         *lossless_check_data++ = temp_lossless_check_data;
     }
@@ -2083,6 +2099,7 @@ static void set_major_params(MLPEncodeContext *ctx)
     unsigned int index;
     unsigned int substr;
     uint8_t max_huff_lsbs = 0;
+    uint8_t max_output_bits = 0;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
         DecodingParams (*seq_dp)[ctx->num_substreams] =
@@ -2101,6 +2118,11 @@ static void set_major_params(MLPEncodeContext *ctx)
     }
 
     rh->max_huff_lsbs = max_huff_lsbs;
+
+    for (index = 0; index < ctx->number_of_frames; index++)
+        if (max_output_bits < ctx->max_output_bits[index])
+            max_output_bits = ctx->max_output_bits[index];
+    rh->max_output_bits = max_output_bits;
 
     for (substr = 0; substr < ctx->num_substreams; substr++) {
 
